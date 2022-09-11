@@ -21,6 +21,8 @@
 #define D7 (13) //Gnd for display (to switch it on and off)
 #endif
 
+#define debug Serial1
+
 //SoftwareSerial to read Display TX (D5 = RX, D6 = unused)
 SoftwareSerial swSer (D5, D6);
 
@@ -58,8 +60,15 @@ String mqttPW = "admin";
 //serial Input
 char serInCommand[39];
 char serInCommand_old[39];
+
+char serIn2Command[39];
+char serIn2Command_old[39];
+
+
 unsigned long timestampLastSerialMsg;
 byte serInIdx = 0;
+byte serIn2Idx = 0;
+
 
 //commands
 byte powerOn[] =      {0xd5, 0x55, 0x01, 0x01, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x35, 0x05};
@@ -146,12 +155,12 @@ bool mqttConnect() {
 
     mqttClient.setServer(mqttServer.c_str(), atoi(mqttPort.c_str()));
     mqttClient.setCallback(callback);
-    mqttClient.publish("coffee/status", "ESP_STARTUP");
-
-    Serial1.println(String("Attempting MQTT broker:") + mqttServer);
+    
+    debug.println(String("Attempting MQTT broker:") + mqttServer);
 
     if (mqttClient.connect(clientId.c_str(), mqttUser.c_str(), mqttPW.c_str())) {
-      Serial1.println("Established:" + clientId);
+      debug.println("Established:" + clientId);
+      mqttClient.publish("coffee/status", "ESP_STARTUP");
       mqttClient.subscribe("coffee/command/restart");
       mqttClient.subscribe("coffee/command/powerOn");
       mqttClient.subscribe("coffee/command/powerOff");
@@ -170,7 +179,7 @@ bool mqttConnect() {
       return true;
     }
     else {
-      Serial1.println("Connection failed:" + String(mqttClient.state()));
+      debug.println("Connection failed:" + String(mqttClient.state()));
       mqttState.value = "MQTT-State: <b style=\"color: red;\">Disconnected</b>";
       if (!--retry){
         break;
@@ -200,7 +209,7 @@ void callback(String topic, byte* message, int length) {
     //For predefined commands
     int count = messageTemp.toInt();
     if (count < 0 || count > 99) {
-      Serial1.println("Count out of range");
+      debug.println("Count out of range");
     } else if (topic == "coffee/command/powerOn") {
       serialSend(powerOn, count);
       //Workaround: D7 is connected to a NPN Transistor that cuts the ground from the display
@@ -275,7 +284,7 @@ String loadParams() {
     param.close();
   }
   else
-    Serial.println(PARAM_FILE " open failed");
+    debug.println(PARAM_FILE " open failed");
   return String("");
 }
 
@@ -334,7 +343,7 @@ void redirect(String uri) {
 void serialInput2Mqtt(){
   while (Serial.available() > 0) {
     char b = Serial.read();
-    //Serial1.print(b);
+    //debug.print(b);
     sprintf(&serInCommand[serInIdx], "%02x", b);
     serInIdx += 2;
 
@@ -347,8 +356,8 @@ void serialInput2Mqtt(){
       timestampLastSerialMsg = millis();
       if (strcmp(serInCommand, serInCommand_old) != 0) {
         mqttClient.publish("coffee/status", serInCommand, 38);
-        // Serial1.println(serInCommand);
-        // Serial1.println(serInCommand_old);
+        debug.println(serInCommand);
+        // debug.println(serInCommand_old);
         memcpy( serInCommand_old, serInCommand, 39);
       }
       serInIdx = 0;
@@ -362,8 +371,8 @@ void serialInput2Mqtt(){
 }
 void setup() {
   delay(1000);
-  // Serial1 port for debugging purposes
-  Serial1.begin(115200);
+  // debug port for debugging purposes
+  debug.begin(115200);
   // Serial communication with coffee machine (Main Controller + ESP)
   Serial.begin(115200);
   // Serial communication to read display TX and give it over to Serial
@@ -381,36 +390,36 @@ void setup() {
   portal.join({ mqtt_setting, mqtt_save, coffee_test });
   portal.on(AUX_SAVE_URI, saveParams);
 
-  Serial1.print("WiFi ");
+  debug.print("WiFi ");
   if (portal.begin()) {
-    Serial1.println("connected:" + WiFi.SSID());
-    Serial1.println("IP:" + WiFi.localIP().toString());
+    debug.println("connected:" + WiFi.SSID());
+    debug.println("IP:" + WiFi.localIP().toString());
     //Setup OTA Update
     ArduinoOTA.onStart([]() {
-      Serial1.println("Start OTA");
+      debug.println("Start OTA");
     });
 
     ArduinoOTA.onEnd([]() {
-      Serial1.println("End OTA");
+      debug.println("End OTA");
     });
 
     ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-      Serial1.printf("Progress: %u%%\n", (progress / (total / 100)));
+      debug.printf("Progress: %u%%\n", (progress / (total / 100)));
     });
 
     ArduinoOTA.onError([](ota_error_t error) {
       Serial.printf("Error[%u]: ", error);
-      if (error == OTA_AUTH_ERROR) Serial1.println("Auth Failed");
-      else if (error == OTA_BEGIN_ERROR) Serial1.println("Begin Failed");
-      else if (error == OTA_CONNECT_ERROR) Serial1.println("Connect Failed");
-      else if (error == OTA_RECEIVE_ERROR) Serial1.println("Receive Failed");
-      else if (error == OTA_END_ERROR) Serial1.println("End Failed");
+      if (error == OTA_AUTH_ERROR) debug.println("Auth Failed");
+      else if (error == OTA_BEGIN_ERROR) debug.println("Begin Failed");
+      else if (error == OTA_CONNECT_ERROR) debug.println("Connect Failed");
+      else if (error == OTA_RECEIVE_ERROR) debug.println("Receive Failed");
+      else if (error == OTA_END_ERROR) debug.println("End Failed");
     });
 
     ArduinoOTA.begin();
   }
   else {
-    Serial1.println("connection failed:" + String(WiFi.status()));
+    debug.println("connection failed:" + String(WiFi.status()));
   }
 
   WiFiWebServer&  webServer = portal.host();
@@ -418,29 +427,48 @@ void setup() {
   webServer.on("/on", sendPowerOn);
   webServer.on("/off", sendPowerOff);
 
-
   pinMode(D7, OUTPUT);
   digitalWrite(D7, HIGH);
 }
 
 void loop() {
+  portal.handleClient(); 
+
   if (WiFi.status() == WL_CONNECTED) {
     //The following things can only be handled if wifi is connected
     ArduinoOTA.handle();
     if (!mqttClient.connected()) {
+      delay(1000);
       mqttConnect();
+    } else {
+      mqttClient.loop();
     }
-    mqttClient.loop();
     serialInput2Mqtt();
   }
   
   while (swSer.available() > 0) {
-    Serial.write(swSer.read());
-  }
-  
-  portal.handleClient(); 
+    char b = swSer.read();
+    Serial.write(b);
 
-  
+    sprintf(&serIn2Command[serIn2Idx], "%02x", b);
+    serIn2Idx += 2;
+
+    //Skip input if it doesn't start with 0xd5
+    if (serIn2Idx == 2 && b != 0xd5) {
+      serIn2Idx = 0;
+    }
+    if (serIn2Idx > 37) {
+      serIn2Command[38] = '\0';
+      timestampLastSerialMsg = millis();
+      if (strcmp(serIn2Command, serIn2Command_old) != 0) {
+        mqttClient.publish("coffee/stat", serIn2Command, 38);
+        debug.println(serIn2Command);
+        // debug.println(serInCommand_old);
+        memcpy( serIn2Command_old, serIn2Command, 39);
+      }
+      serIn2Idx = 0;
+    }
+  }
 }
 
 //Return hex value to char
