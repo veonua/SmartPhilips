@@ -3,18 +3,18 @@ void handleRoot() {
 }
 
 void apiStatus() {
-    std::string door = (serInCommand[11] & 0x0f) == 8 ? "open" : "closed";
+    std::string door = (sw_old[11] & 0x0f) == 8 ? "open" : "closed";
 
     std::string response = "{";
-    response += "\"state\":\"" + state(serInCommand[1]) +"\",";
-    response += "\"job_state\":\"" + job_state(serInCommand[2]) +"\",";
-    response += "\"completion_min\":" + std::to_string(serInCommand[3]) +",";
-    response += "\"water_level\":" + std::to_string(serInCommand[6]) +",";
-    response += "\"temperature\":" + std::to_string(serInCommand[7]) +",";
-    response += "\"baskets\":\"" + baskets((serInCommand[9] & 0xf0) >> 4) +"\",";
-    response += "\"mode\":\"" + mode(serInCommand[9] & 0x0f) +"\",";
-    response += "\"water_hardness\":" + std::to_string(serInCommand[10] >> 3) +",";
-    response += "\"bottle_tab\":\"" + bottle_tab(serInCommand[13] & 0x0f) +"\",";
+    response += "\"state\":\"" + state(sw_old[1]) +"\",";
+    response += "\"job_state\":\"" + job_state(sw_old[2]) +"\",";
+    response += "\"completion_min\":" + std::to_string(sw_old[3]) +",";
+    response += "\"water_level\":" + std::to_string(sw_old[6]) +",";
+    response += "\"temperature\":" + std::to_string(sw_old[7]) +",";
+    response += "\"baskets\":\"" + baskets((sw_old[9] & 0xf0) >> 4) +"\",";
+    response += "\"mode\":\"" + mode(sw_old[9] & 0x0f) +"\",";
+    response += "\"water_hardness\":" + std::to_string(sw_old[10] >> 3) +",";
+    response += "\"bottle_tab\":\"" + bottle_tab(sw_old[13] & 0x0f) +"\",";
     response += "\"door\":\"" + door +"\"";
     response += "}";
 

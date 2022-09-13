@@ -33,7 +33,7 @@ void processBuff() {
   byte sum = 0x22; 
     
   for (int i = 0; i < 6; i++) { 
-    char c = ser_buff[i];
+    byte c = ser_buff[i];
     sum += c;
     if (c == ser_old[i]) continue;
     ser_old[i] = c;
@@ -190,18 +190,18 @@ std::string state(int state) {
   }
 }
 
-std::string key_state(int key_state) {
+std::string key_state(int key_state) { // most likely sound
   switch (key_state) {
     case 0x00: // button is not pressed
       return "none";
     case 0x03: 
       return "timer";
     case 0xe9: // lock request
-      return "locked";
+      return "locked_0xe9";
     case 0xee: // unlock request
       return "unlocked";
     case 0xea: // normal when locked
-      return "locked";
+      return "locked_0xea";
     case 0xe1: // power on
     case 0xe2: // power off
     case 0xe5: // normal when unlocked

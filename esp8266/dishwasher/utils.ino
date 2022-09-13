@@ -85,6 +85,16 @@ void onMqttUnsubscribe(uint16_t packetId) {
   debug.println(packetId);
 }
 
+void mqtt_init() {
+  mqttClient.onConnect(onMqttConnect);
+  mqttClient.onDisconnect(onMqttDisconnect);
+  mqttClient.onSubscribe(onMqttSubscribe);
+  mqttClient.onUnsubscribe(onMqttUnsubscribe);
+  mqttClient.onMessage(onMqttMessage);
+  //mqttClient.onPublish(onMqttPublish);
+  mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+}
+
 void mqtt_connect() {
   if (mqtt_status == false && WiFi.status() == WL_CONNECTED) {
     debug.println("Connecting to MQTT...");
