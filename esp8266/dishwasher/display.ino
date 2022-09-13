@@ -1,28 +1,43 @@
 int d_machine = 0;
-char serOutCommand[buff_size+1];
+byte ser_buff[16];
+byte ser_old[16];
+
 char dsmall[6];
-byte serOutIdx = 0;
 
 std::string DPREFIX = "dishwasher/display/";
 
-// if buffer starts with x07 x22 then parse 8 bytes and send to mqtt
-
-bool pushDisplay(byte c) {
-  if (d_machine == 0 && c==0x07) {
-    d_machine = 1;
-    return true;
-  } else if (d_machine == 1 && c==0x22) {
-    d_machine = 2;
-    return true;
-  } 
-
-  if (d_machine != 2) {
-    d_machine = 0;
-    return false;
+void serialHandler() {
+  if (!Serial.available()) return;
+    
+  char c = Serial.read();
+  //swSer.write(b);
+    
+  switch (d_machine)
+  {
+    case 0:
+      if (c == 0x07) {
+        d_machine = 1;
+      };
+      return;
+    case 1:
+      if (c == 0x22) {
+        processBuff();
+      }
+      d_machine = 0;
+      break;
   }
+}
 
-  if (serOutCommand[serOutIdx] != c) {
-    switch (serOutIdx)
+void processBuff() {
+  Serial.readBytes(ser_buff, 7);
+  byte sum = 0x22; 
+    
+  for (int i = 0; i < 6; i++) { 
+    char c = ser_buff[i];
+    sum += c;
+    if (c == ser_old[i]) continue;
+    ser_old[i] = c;
+    switch (i)
     {
       case 0:
         if (c != 0x00) {
@@ -34,6 +49,9 @@ bool pushDisplay(byte c) {
       case 2:
         d_publish("state", state(c));
         break;
+      case 3:
+        if (c==0) //always 0x00
+          break;
       case 4:
         d_publish("mode", mode(c & 0x0f));
         break;
@@ -42,40 +60,34 @@ bool pushDisplay(byte c) {
         d_publish("baskets", baskets(c & 0x0f));
         break;
 
-      case 3:
-        if (c==0) //always 0x00
-          break;
       default:
         std::string topic;
-        if (serInIdx<10)
-          topic = "unknown/0" + std::to_string(serInIdx);
+        if (i<10)
+          topic = "unknown/0" + std::to_string(i);
         else
-          topic = "unknown/" + std::to_string(serInIdx);
+          topic = "unknown/" + std::to_string(i);
     
         d_publish_hex((topic+"/hex").c_str(), c);
         d_publish((topic).c_str(), std::to_string(c));
         break;
     }
-    serOutCommand[serOutIdx] = c;
   }
 
-  serOutIdx++;
-
-  if (serOutIdx >= 15) {
-    serOutIdx = 0;
-    d_machine = 0;
+  if (sum != ser_buff[6]) {
+    d_publish_hex("checksum", sum);
   }
-
-  return true;
 }
 
-void d_publish(const char* topic, std::string value) {
-  client.publish((DPREFIX + topic).c_str(), value.c_str());
+
+void d_publish(const char* topic, std::string payload) {
+  mqttClient.publish((DPREFIX + topic).c_str(), 1, true, payload.c_str(), payload.length());
+  //debug.printf("%s: %s\n", topic, payload.c_str());
 }
 
 void d_publish_hex(const char* topic, byte value) {
   sprintf(dsmall, "0x%02x", value);      
-  client.publish((DPREFIX + topic).c_str(), dsmall);
+  mqttClient.publish((DPREFIX + topic).c_str(), 1, true, dsmall, strlen(dsmall));
+  //debug.printf("%s: 0x%02x\n", topic, value);
 }
 
 std::string press(byte press){

@@ -97,13 +97,15 @@ bool pushMachine(byte c) {
   return true;
 }
 
-void publish(const char* topic, std::string value) {
-  client.publish((PREFIX + topic).c_str(), value.c_str());
+void publish(const char* topic, std::string payload) {
+  mqttClient.publish((PREFIX + topic).c_str(), 1, true, payload.c_str(), payload.length());
+  //debug.printf("%s: %s\n", topic, payload.c_str());
 }
 
 void publish_hex(const char* topic, byte value) {
   sprintf(small, "0x%02x", value);      
-  client.publish((PREFIX + topic).c_str(), small);
+  mqttClient.publish((PREFIX + topic).c_str(), 1, true, small, strlen(small));
+  //debug.printf("%s: 0x%02x\n", topic, value);
 }
 
 std::string water_hardness(byte c_water_hardness) {
