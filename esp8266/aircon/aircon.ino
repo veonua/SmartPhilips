@@ -1,4 +1,4 @@
-//#include "arduino.h"
+//#include "Arduino.h"
 #include <ESP8266WiFi.h>
 #include <ESPAsyncTCP.h>
 #include <ArduinoOTA.h>
@@ -10,7 +10,7 @@
 
 #define debug TelnetStream
 
-const char *hostname = "heatpump";
+const char *hostname = "aircon";
 const char *ssid = "TP-Link_D5BA";
 const char *password = "wifipassword654";
 
@@ -31,13 +31,13 @@ bool validData = 0;
 
 
 void setup() {
-  Serial.begin(9600, SERIAL_8E1); // 9600 baud, 8 data bits, even parity, 1 stop bit
+  Serial.begin(9600, SERIAL_8E1); // SERIAL_8E1 // 9600 baud, 8 data bits, even parity, 1 stop bit
   //Serial.begin(4800); // veon: thats not true
-  Serial.swap(); //remap tp pins d8,15(tx) and d7,13(rx) for connection to ac unit
+  //Serial.swap(); //remap tp pins d8,15(tx) and d7,13(rx) for connection to ac unit
   TelnetStream.begin();
   
   //debug.begin(115200); //debug port on pin2 (tx only)
-  Serial.setTimeout(100);
+  //Serial.setTimeout(100); veon: not needed??
   debug.println("boot");
   pinMode(LED, OUTPUT);
   mqttClient.onConnect(onMqttConnect);
@@ -48,7 +48,7 @@ void setup() {
   mqttClient.onPublish(onMqttPublish);
   mqttClient.setServer(MQTT_HOST, MQTT_PORT);
   //mqttClient.setClientId(hostname); + WiFi.localIP()
-  mqttClient.setClientId("heatpump");
+  //mqttClient.setClientId("heatpump");
 
   WIFI_Connect();
   mqtt_connect();
@@ -93,6 +93,8 @@ void serialHandler() {
   if (!Serial.available()) {
     return;
   }
+
+  debug.print(".");
     
   switch (state) {
     case 0: //look for header
@@ -202,41 +204,40 @@ void mqtt_int(String sub1, String val) {
 void start_handshake() {
   debug.println("start handshake");
   int a = 8;
-  int bootlist1[a] = {2, 255, 255, 0, 0, 0, 0, 2};
+  byte bootlist1[a] = {2, 255, 255, 0, 0, 0, 0, 2};
   doArray(bootlist1, a);
   a = 9;
-  int bootlist2[a] = {2, 255, 255, 1, 0, 0, 1, 2, 254};
+  byte bootlist2[a] = {2, 255, 255, 1, 0, 0, 1, 2, 254};
   doArray(bootlist2, a);
   a = 10;
-  int bootlist3[a] = {2, 0, 0, 0, 0, 0, 2, 2, 2, 250};
+  byte bootlist3[a] = {2, 0, 0, 0, 0, 0, 2, 2, 2, 250};
   doArray(bootlist3, a);
   a = 10;
-  int bootlist4[a] = {2, 0, 1, 129, 1, 0, 2, 0, 0, 123};
+  byte bootlist4[a] = {2, 0, 1, 129, 1, 0, 2, 0, 0, 123};
   doArray(bootlist4, a);
   a = 10;
-  int bootlist5[a] = {2, 0, 1, 2, 0, 0, 2, 0, 0, 254};
+  byte bootlist5[a] = {2, 0, 1, 2, 0, 0, 2, 0, 0, 254};
   doArray(bootlist5, a);
-  a = 7;
-  int bootlist6[a] = {2, 0, 2, 0, 0, 0, 0, 254};
+  a = 8;
+  byte bootlist6[a] = {2, 0, 2, 0, 0, 0, 0, 254};
   doArray(bootlist6, a);
   delay(1800);
   //aftershake
   a = 10;
-  int bootlist7[a] = {2, 0, 2, 1, 0, 0, 2, 0, 0, 251};
+  byte bootlist7[a] = {2, 0, 2, 1, 0, 0, 2, 0, 0, 251};
   doArray(bootlist7, a);
   a = 10;
-  int bootlist8[a] = {2, 0, 2, 2, 0, 0, 2, 0, 0, 250};
+  byte bootlist8[a] = {2, 0, 2, 2, 0, 0, 2, 0, 0, 250};
   doArray(bootlist8, a);
 }
 
-void doArray(int array[], int a) {
-  debug.print('doArray: ');
+void doArray(byte array[], int a) {
+  debug.print('doArray: [');
   for (int i = 0; i < a; i++) {
-    debug.print("*");
-    debug.print(array[i]);
+    debug.printf("* %d ", array[i]);
     Serial.write(array[i]);
   }
-  debug.println(' ');
+  debug.println(']');
   delay(200);
 }
 
@@ -422,9 +423,9 @@ void mqtt_connect() {
 void onMqttMessage(char *topic1, char *payload1,
                    AsyncMqttClientMessageProperties properties, size_t len, size_t index,
                    size_t total) {
-  Serial.println(topic1);
-  Serial.println(payload1);
-  Serial.println(len);
+  debug.println(topic1);
+  debug.println(payload1);
+  debug.println(len);
   strncpy(topic, topic1, 49);
   if (len < 99) {
     strncpy(payload, payload1, len);
@@ -439,25 +440,32 @@ void parse() {
   }
 
   validData = 0;
-  //    Serial.println(topic);
+  debug.printf(">> %s \n", topic);
   //    Serial.println(payload);
 
-  if ( strcmp(topic, (hostname + String("/setpoint/set")).c_str()) == 0) {
+  if ( strcmp(topic, (hostname + String("/detect")).c_str()) == 0) { // 
+    unsigned long detectedBaudrate = Serial.detectBaudrate(10000UL);
+
+    if (detectedBaudrate) {
+      debug.printf("\nDetected baudrate is %lu, switching to that baudrate now...\n", detectedBaudrate);
+      //
+      Serial.begin(detectedBaudrate);
+    } else {
+      debug.println("No baudrate detected, using default baudrate of 9600");
+    }
+  } else if ( strcmp(topic, (hostname + String("/setpoint/set")).c_str()) == 0) {
     debug.print("setpoint ");
     debug.println(payload);
     setpointVal(payload);
-  }
-  if ( strcmp(topic, (hostname + String("/state/set")).c_str()) == 0) {
+  } else if ( strcmp(topic, (hostname + String("/state/set")).c_str()) == 0) {
     debug.print("state ");
     debug.println(payload);
     stateControl(payload);
-  }
-  if ( strcmp(topic, (hostname + String("/fanmode/set")).c_str()) == 0) {
+  } else if ( strcmp(topic, (hostname + String("/fanmode/set")).c_str()) == 0) {
     debug.print("fanmode ");
     debug.println(payload);
     fanControl(payload);
-  }
-  if ( strcmp(topic, (hostname + String("/swingmode/set")).c_str()) == 0) {
+  } else if ( strcmp(topic, (hostname + String("/swingmode/set")).c_str()) == 0) {
     debug.print("swingmode ");
     debug.println(payload);
     swingControl(payload);
@@ -580,12 +588,12 @@ void send_code(int function_code, int function_value, int rcv_code) {
 }
 
 void report(int msg[], int siz) {
-  debug.print("*O*");
+  //debug.print("*O*");
   for (int i = 0; i < siz; i++) {
     Serial.write(msg[i]);
-    debug.print(msg[i], DEC);
-    debug.print('.');
+    //debug.print(msg[i], DEC);
+    //debug.print('.');
   }
-  debug.println("*O*");
+  //debug.println("*O*");
   delay(100);
 }

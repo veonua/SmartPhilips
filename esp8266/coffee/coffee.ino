@@ -14,6 +14,10 @@
 #include <SoftwareSerial.h>
 #include <PubSubClient.h>
 #include <AutoConnect.h>
+#include <TelnetStream.h>
+
+#define MQTT_HOST IPAddress(192, 168, 0, 224)
+#define MQTT_PORT 1883
 
 #if defined(ESP8266) && !defined(D5)
 #define D5 (14) //Rx from display
@@ -21,10 +25,14 @@
 #define D7 (13) //Gnd for display (to switch it on and off)
 #endif
 
-#define debug Serial1
+#define debug TelnetStream
+const char *hostname = "cofeemaker";
+const char *ssid = "TP-Linak_D5BA";
+const char *password = "wifipassword654";
+
 
 //SoftwareSerial to read Display TX (D5 = RX, D6 = unused)
-SoftwareSerial swSer (D5, D6);
+SoftwareSerial swSer (D7, D8);
 
 #define PARAM_FILE      "/param.json"
 #define AUX_SETTING_URI "/mqtt_setting"
@@ -56,18 +64,6 @@ String mqttServer = "192.168.178.99";
 String mqttPort = "1883";
 String mqttUser = "admin";
 String mqttPW = "admin";
-
-//serial Input
-char serInCommand[39];
-char serInCommand_old[39];
-
-char serIn2Command[39];
-char serIn2Command_old[39];
-
-
-unsigned long timestampLastSerialMsg;
-byte serInIdx = 0;
-byte serIn2Idx = 0;
 
 
 //commands
@@ -340,43 +336,11 @@ void redirect(String uri) {
   webServer.client().stop();
 }
 
-void serialInput2Mqtt(){
-  while (Serial.available() > 0) {
-    char b = Serial.read();
-    //debug.print(b);
-    sprintf(&serInCommand[serInIdx], "%02x", b);
-    serInIdx += 2;
-
-    //Skip input if it doesn't start with 0xd5
-    if (serInIdx == 2 && b != 0xd5) {
-      serInIdx = 0;
-    }
-    if (serInIdx > 37) {
-      serInCommand[38] = '\0';
-      timestampLastSerialMsg = millis();
-      if (strcmp(serInCommand, serInCommand_old) != 0) {
-        mqttClient.publish("coffee/status", serInCommand, 38);
-        debug.println(serInCommand);
-        // debug.println(serInCommand_old);
-        memcpy( serInCommand_old, serInCommand, 39);
-      }
-      serInIdx = 0;
-    }
-  }
-  //Send signal that the coffee machine is off if there is no incomming message for more than 3 seconds
-  if(timestampLastSerialMsg != 0 && millis() - timestampLastSerialMsg > 3000){
-    mqttClient.publish("coffee/status", "d5550100000000000000000000000000000626", 38);
-    timestampLastSerialMsg = 0;
-  }
-}
 void setup() {
   delay(1000);
-  // debug port for debugging purposes
-  debug.begin(115200);
-  // Serial communication with coffee machine (Main Controller + ESP)
-  Serial.begin(115200);
-  // Serial communication to read display TX and give it over to Serial
-  swSer.begin(115200);
+  debug.begin(); // debug port for debugging purposes
+  Serial.begin(115200); // Serial communication with coffee machine (Main Controller + ESP)
+  swSer.begin(115200);  // Serial communication to read display TX and give it over to Serial
 
   SPIFFS.begin();
   config.title = "Philips MQTT Coffee Machine";
@@ -395,33 +359,12 @@ void setup() {
     debug.println("connected:" + WiFi.SSID());
     debug.println("IP:" + WiFi.localIP().toString());
     //Setup OTA Update
-    ArduinoOTA.onStart([]() {
-      debug.println("Start OTA");
-    });
-
-    ArduinoOTA.onEnd([]() {
-      debug.println("End OTA");
-    });
-
-    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-      debug.printf("Progress: %u%%\n", (progress / (total / 100)));
-    });
-
-    ArduinoOTA.onError([](ota_error_t error) {
-      Serial.printf("Error[%u]: ", error);
-      if (error == OTA_AUTH_ERROR) debug.println("Auth Failed");
-      else if (error == OTA_BEGIN_ERROR) debug.println("Begin Failed");
-      else if (error == OTA_CONNECT_ERROR) debug.println("Connect Failed");
-      else if (error == OTA_RECEIVE_ERROR) debug.println("Receive Failed");
-      else if (error == OTA_END_ERROR) debug.println("End Failed");
-    });
-
-    ArduinoOTA.begin();
   }
   else {
     debug.println("connection failed:" + String(WiFi.status()));
   }
 
+  otastart();
   WiFiWebServer&  webServer = portal.host();
   webServer.on("/", handleRoot);
   webServer.on("/on", sendPowerOn);
@@ -431,121 +374,33 @@ void setup() {
   digitalWrite(D7, HIGH);
 }
 
+
 void loop() {
-  portal.handleClient(); 
+  if (swSer.available() > 0) {
+    while (swSer.available() > 0) {
+      Serial.write(swSer.read());
+      //swser();
+    }
+    debug.println(".");
+  }
+  
+//portal.handleClient(); 
+  
+  WIFI_Connect();
+  ArduinoOTA.handle();
 
   if (WiFi.status() == WL_CONNECTED) {
     //The following things can only be handled if wifi is connected
-    ArduinoOTA.handle();
-    if (!mqttClient.connected()) {
-      delay(1000);
-      mqttConnect();
-    } else {
-      mqttClient.loop();
-    }
+    // if (!mqttClient.connected()) {
+    //   delay(1000);
+    //   mqttConnect();
+    // } else {
+    //   mqttClient.loop();
+    // }
     serialInput2Mqtt();
   }
   
-  while (swSer.available() > 0) {
-    char b = swSer.read();
-    Serial.write(b);
+  
 
-    sprintf(&serIn2Command[serIn2Idx], "%02x", b);
-    serIn2Idx += 2;
 
-    //Skip input if it doesn't start with 0xd5
-    if (serIn2Idx == 2 && b != 0xd5) {
-      serIn2Idx = 0;
-    }
-    if (serIn2Idx > 37) {
-      serIn2Command[38] = '\0';
-      timestampLastSerialMsg = millis();
-      if (strcmp(serIn2Command, serIn2Command_old) != 0) {
-        mqttClient.publish("coffee/stat", serIn2Command, 38);
-        debug.println(serIn2Command);
-        // debug.println(serInCommand_old);
-        memcpy( serIn2Command_old, serIn2Command, 39);
-      }
-      serIn2Idx = 0;
-    }
-  }
-}
-
-//Return hex value to char
-char convertCharToHex(char ch)
-{
-  char returnType;
-  switch (ch)
-  {
-    case '0':
-      returnType = 0;
-      break;
-    case  '1' :
-      returnType = 1;
-      break;
-    case  '2':
-      returnType = 2;
-      break;
-    case  '3':
-      returnType = 3;
-      break;
-    case  '4' :
-      returnType = 4;
-      break;
-    case  '5':
-      returnType = 5;
-      break;
-    case  '6':
-      returnType = 6;
-      break;
-    case  '7':
-      returnType = 7;
-      break;
-    case  '8':
-      returnType = 8;
-      break;
-    case  '9':
-      returnType = 9;
-      break;
-    case  'A':
-      returnType = 10;
-      break;
-    case  'B':
-      returnType = 11;
-      break;
-    case  'C':
-      returnType = 12;
-      break;
-    case  'D':
-      returnType = 13;
-      break;
-    case  'E':
-      returnType = 14;
-      break;
-    case  'F' :
-      returnType = 15;
-      break;
-    case  'a':
-      returnType = 10;
-      break;
-    case  'b':
-      returnType = 11;
-      break;
-    case  'c':
-      returnType = 12;
-      break;
-    case  'd':
-      returnType = 13;
-      break;
-    case  'e':
-      returnType = 14;
-      break;
-    case  'f' :
-      returnType = 15;
-      break;
-    default:
-      returnType = 0;
-      break;
-  }
-  return returnType;
 }

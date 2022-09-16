@@ -1,28 +1,58 @@
 int m_machine = 0;
-char serInCommand[buff_size+1];
-char small[6];
-byte serInIdx = 0;
+byte sw_buff[17];
+byte sw_old[17];
+byte temperature = 20;
 
-std::string PREFIX = "dishwasher/machine/";
+char small[6];
+
+std::string PREFIX = "smartthings/dishwasher/samsung/";
 
 // if buffer starts with 55 0F 2A then parse 8 bytes and send to mqtt
+void serial2Handler() {
+  if (!swSer.available()) return;
 
-bool pushMachine(byte c) {
-  if (m_machine == 0 && c==0x55) {
-    m_machine = 1;
-    return true;
-  } else if (m_machine == 1 && c==0x0F) { // could be 8f
-      m_machine = 2;
-      return true;
-  }
+  char c = swSer.read();
+  //Serial.write(b);
 
-  if (m_machine != 2) {
+  switch (m_machine) {
+    case 0:
+      if (c == 0x55) {
+        m_machine = 1;
+      }
+      break;
+    case 1:
+      if (c == 0x0F) {
+        processSwBuff_0F();
+      } else if (c == 0x08) {
+        processSwBuff_08();
+      } else {
+        debug.printf("unknown buffer start: 0x%02X\n", c);
+      }
     m_machine = 0;
-    return false;
   }
+}
 
-  if (serInCommand[serInIdx] != c) { 
-    switch (serInIdx)
+void processSwBuff_08() {
+  swSer.readBytes(sw_buff, 8);
+  debug.print("0x08: ");
+  for (int i = 0; i < 8; i++) {
+    byte c = sw_buff[i];
+    debug.printf("%02X ", c);
+  }
+  debug.println();
+}
+
+void processSwBuff_0F() {
+  swSer.readBytes(sw_buff, 16);
+  byte sum = 0;
+
+  for (int i = 0; i<15; i++) {
+    byte c = sw_buff[i];
+    sum += c;
+    if (c == sw_old[i]) continue;
+    sw_old[i] = c;
+
+    switch (i)
     {
       case 1:
         publish("state", state(c));
@@ -42,7 +72,10 @@ bool pushMachine(byte c) {
         publish("water/level", std::to_string(c)); // maybe water level
         break;
       case 7:
-        publish("temperature", std::to_string(c));
+        if ( abs(temperature - c) > 1) { // reports way too often otherwise
+          temperature = c;
+          publish("temperature", std::to_string(c));
+        }
         break;
       // case 8: 0x55 0x0f 0x8/0x10/0x18/0x80 then 0x0  
       // nothing while washing
@@ -53,11 +86,11 @@ bool pushMachine(byte c) {
       case 10: {
         byte c_water_hardness = c >> 3; 
         publish("water hardness/level", std::to_string(c_water_hardness));
-        publish("water hardness/salt gram", water_hardness(c_water_hardness));
+        publish("water hardness/salt_gram", water_hardness(c_water_hardness));
         break;}
       case 11:
-        publish("door", (c & 0x0f) == 8 ? "open" : "closed");
-        publish_hex("door/hex", c);
+        publish("contact", (c & 0x0f) == 8 ? "open" : "closed");
+        publish_hex("contact/hex", c);
         break;
       // case 12: 0x35 0x65 0xb5 0x75 0x1c 0x9d
       case 13:
@@ -67,34 +100,22 @@ bool pushMachine(byte c) {
       // case 14: seconds cound down?
       // heater? 0x55 when temp starts to rise
       // 00, 31, 00 ,2a 
-      case 15: //check sum?
-        c = c - serInCommand[3]*2 - serInCommand[6] - serInCommand[7] - serInCommand[11] - serInCommand[12] - serInCommand[14]; // linear
-        if (c != serInCommand[15]) {
-          publish_hex("checksum", c);
-        }
-        break;
       default:
         std::string topic;
-        if (serInIdx<10)
-          topic = "unknown/0" + std::to_string(serInIdx);
+        if (i<10)
+          topic = "unknown/0" + std::to_string(i);
         else
-          topic = "unknown/" + std::to_string(serInIdx);
+          topic = "unknown/" + std::to_string(i);
     
         publish_hex((topic+"/hex").c_str(), c);
         publish((topic).c_str(), std::to_string(c));
         break;
     }
-    serInCommand[serInIdx] = c;
   }
 
-  serInIdx++;
-
-  if (serInIdx >= 20 ) { // last byte is changing all the time
-    serInIdx = 0;
-    m_machine = 0;
+  if (sum != sw_buff[15]) {
+    publish_hex("checksum", sum);
   }
-
-  return true;
 }
 
 void publish(const char* topic, std::string payload) {
