@@ -14,9 +14,10 @@
 
 #define MQTT_HOST IPAddress(192, 168, 0, 224)
 #define MQTT_PORT 1883
-const char *hostname = "dishwasher";
+const char *hostname = "dishwasher_2";
 
-SoftwareSerial swSer (D2, D5); // RX, TX
+//SoftwareSerial swSer (D2, D3); // RX, TX
+SoftwareSerial swSer (D5, D6); // RX, TX
 
 AsyncMqttClient mqttClient;
 ESP8266WebServer server(80);

@@ -63,9 +63,9 @@ void onMqttConnect(bool sessionPresent) {
   
   mqttClient.publish(hostname, 1, true, "hello", 5);
   
-//   String sub1 = "/#";
-//   String subs = hostname + sub1;
-//   mqttClient.subscribe(subs.c_str(), 1);
+  String sub1 = "/#";
+  String subs = hostname + sub1;
+  mqttClient.subscribe(subs.c_str(), 1);
 }
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
@@ -103,21 +103,56 @@ void mqtt_connect() {
   }
 }
 
-void onMqttMessage(char *topic1, char *payload1,
+void onMqttMessage(char *topic, char *payload,
                    AsyncMqttClientMessageProperties properties, size_t len, size_t index,
                    size_t total) {
-  debug.println(topic1);
-  debug.println(payload1);
-  debug.println(len);
-//   strncpy(topic, topic1, 49);
-//   if (len < 99) {
-//     strncpy(payload, payload1, len);
-//     payload[len] = '\0';
-//     validData = 1;
-//   }
+  debug.printf("Publish received. topic: %s len: %d index: %d total: %d\n",
+               topic, len, index, total);
+
+  if (strncmp(topic, "dishwasher_2/sdisplay", 21) == 0) {
+    if (strlen(topic) == 21) {
+      hex2bin(payload, ser_payload, min((size_t)7, len));
+    } else {
+      int index = atoi(topic + 22);
+      ser_payload[index] = hex2bin(payload);
+    }
+  } else if (strcmp(topic, "dishwasher_2/controller/set") == 0) {
+    hex2bin(payload, sw_payload, min((size_t)18, len));
+  } else if (strcmp(topic, "dishwasher_2/detect") == 0) {
+
+    unsigned long detectedBaudrate = Serial.detectBaudrate(1000UL);
+    if (detectedBaudrate) {
+      debug.printf("\nDetected baudrate is %lu, switching to that baudrate now...\n", detectedBaudrate);
+      //
+      Serial.begin(detectedBaudrate);
+    } else {
+      debug.println("\nNo baudrate detected, switching to 4800 baud now...\n");
+      Serial.begin(4800);
+    }
+  }
+  
 }
 
 void onMqttPublish(uint16_t packetId) {
 //   debug.print("Publish acknowledged.   packetId: ");
 //   debug.println(packetId);
+}
+
+byte hex2bin(const char *hex) {
+  char a = hex[0];
+  char b = hex[1];
+  if (a >= '0' && a <= '9') a -= '0';
+  else if (a >= 'A' && a <= 'F') a -= 'A' - 10;
+  else if (a >= 'a' && a <= 'f') a -= 'a' - 10;
+  if (b >= '0' && b <= '9') b -= '0';
+  else if (b >= 'A' && b <= 'F') b -= 'A' - 10;
+  else if (b >= 'a' && b <= 'f') b -= 'a' - 10;
+  return (a << 4) | b;
+}
+
+// hex string to buffer
+void hex2bin(const char *hex, byte *bin, size_t len) {
+  for (size_t i = 0; i < len; i++) {
+    bin[i] = hex2bin(hex + i * 2);
+  }
 }

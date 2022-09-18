@@ -1,7 +1,11 @@
 int m_machine = 0;
-byte sw_buff[17];
-byte sw_old[17];
+byte sw_buff[18]; 
+byte sw_old[18];
+byte sw_payload[18] {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+char sw_sum = 0;
+
 byte temperature = 20;
+
 
 char small[6];
 
@@ -12,110 +16,121 @@ void serial2Handler() {
   if (!swSer.available()) return;
 
   char c = swSer.read();
-  //Serial.write(b);
-
+  
   switch (m_machine) {
     case 0:
       if (c == 0x55) {
         m_machine = 1;
+      } else {
+        debug.printf("-%02X", c);
       }
       break;
     case 1:
+      sw_sum = 0;
       if (c == 0x0F) {
-        processSwBuff_0F();
-      } else if (c == 0x08) {
-        processSwBuff_08();
+        m_machine = 2;
       } else {
-        debug.printf("unknown buffer start: 0x%02X\n", c);
+        debug.printf("\n unknown buffer start: 0x%02X\n", c);
+        m_machine = 0;
       }
+      break;
+    default:
+      m_machine++;
+      c = processSwBuff_0F(m_machine-3, c);
+      break;
+  }
+  Serial.write(c);
+}
+
+char processSwBuff_0F(int i, char c) {
+  if (sw_payload[i] != 0xFF) {
+    c = sw_payload[i];
+    sw_payload[i] = 0xFF;
+  }
+
+  if (i<15) {
+    sw_sum += c;
+  } else {
     m_machine = 0;
+    
+    if (sw_sum != c) {
+      debug.printf("\n cont checksum error: 0x%02X\n", c);
+    }
+    return sw_sum;
+  }
+
+  if (c == sw_old[i]) return c;
+  sw_old[i] = c;
+  switch (i)
+  {
+    case 1:
+      publish("state", state(c));
+      break;
+    case 2:
+      publish("job_state", job_state(c));
+      publish_hex("job_state/hex", c);
+      break;
+    case 3: 
+      publish("completion_min", std::to_string(c)); // time till end
+      break;
+    case 4:
+      publish("next_cycle_in", std::to_string(c)); 
+      break;
+    // case 5: 0x15 or 0x00 -- nothing while washing
+    case 6: 
+      publish("water/level", std::to_string(c)); // maybe water level
+      break;
+    case 7:
+      if ( abs(temperature - c) > 1) { // reports way too often otherwise
+        temperature = c;
+        publish("temperature", std::to_string(c));
+      }
+      break;
+    // case 8: 0x55 0x0f 0x8/0x10/0x18/0x80 then 0x0  
+    // nothing while washing
+    case 9:
+      publish("baskets", baskets((c & 0xf0) >> 4));
+      publish("mode", mode(c & 0x0f));
+      break;
+    case 10: {
+      byte c_water_hardness = c >> 3; 
+      publish("water_hardness/level", std::to_string(c_water_hardness));
+      publish("water_hardness/salt_gram", water_hardness(c_water_hardness));
+      break;}
+    case 11:
+      publish("contact", (c & 0x0f) == 8 ? "open" : "closed");
+      publish_hex("contact/hex", c);
+      break;
+    // case 12: 0x35 0x65 0xb5 0x75 0x1c 0x9d
+    case 13:
+      publish("bottle_tab", bottle_tab(c & 0x0f));
+      publish_hex("bottle_tab/hex", c & 0xf0);
+      break;
+    // case 14: seconds cound down?
+    // heater? 0x55 when temp starts to rise
+    // 00, 31, 00 ,2a
+    case 15:
+      print_old();
+      break;    
+    default:
+      std::string topic;
+      if (i<10)
+        topic = "unknown/0" + std::to_string(i);
+      else
+        topic = "unknown/" + std::to_string(i);
+  
+      publish_hex((topic+"/hex").c_str(), c);
+      publish((topic).c_str(), std::to_string(c));
+      break;
   }
 }
 
-void processSwBuff_08() {
-  swSer.readBytes(sw_buff, 8);
-  debug.print("0x08: ");
-  for (int i = 0; i < 8; i++) {
-    byte c = sw_buff[i];
-    debug.printf("%02X ", c);
+void print_old() {
+  debug.print("old: ");
+  for (int i = 0; i < 16; i++) {
+    debug.printf("%02X ", sw_old[i]);
   }
   debug.println();
-}
-
-void processSwBuff_0F() {
-  swSer.readBytes(sw_buff, 16);
-  byte sum = 0;
-
-  for (int i = 0; i<15; i++) {
-    byte c = sw_buff[i];
-    sum += c;
-    if (c == sw_old[i]) continue;
-    sw_old[i] = c;
-
-    switch (i)
-    {
-      case 1:
-        publish("state", state(c));
-        break;
-      case 2:
-        publish("job_state", job_state(c));
-        publish_hex("job_state/hex", c);
-        break;
-      case 3: 
-        publish("completion min", std::to_string(c)); // time till end
-        break;
-      case 4:
-        publish("next cycle in", std::to_string(c)); 
-        break;
-      // case 5: 0x15 or 0x00 -- nothing while washing
-      case 6: 
-        publish("water/level", std::to_string(c)); // maybe water level
-        break;
-      case 7:
-        if ( abs(temperature - c) > 1) { // reports way too often otherwise
-          temperature = c;
-          publish("temperature", std::to_string(c));
-        }
-        break;
-      // case 8: 0x55 0x0f 0x8/0x10/0x18/0x80 then 0x0  
-      // nothing while washing
-      case 9:
-        publish("baskets", baskets((c & 0xf0) >> 4));
-        publish("mode", mode(c & 0x0f));
-        break;
-      case 10: {
-        byte c_water_hardness = c >> 3; 
-        publish("water hardness/level", std::to_string(c_water_hardness));
-        publish("water hardness/salt_gram", water_hardness(c_water_hardness));
-        break;}
-      case 11:
-        publish("contact", (c & 0x0f) == 8 ? "open" : "closed");
-        publish_hex("contact/hex", c);
-        break;
-      // case 12: 0x35 0x65 0xb5 0x75 0x1c 0x9d
-      case 13:
-        publish("bottle_tab", bottle_tab(c & 0x0f));
-        publish_hex("bottle_tab/hex", c & 0xf0);
-        break;
-      // case 14: seconds cound down?
-      // heater? 0x55 when temp starts to rise
-      // 00, 31, 00 ,2a 
-      default:
-        std::string topic;
-        if (i<10)
-          topic = "unknown/0" + std::to_string(i);
-        else
-          topic = "unknown/" + std::to_string(i);
-    
-        publish_hex((topic+"/hex").c_str(), c);
-        publish((topic).c_str(), std::to_string(c));
-        break;
-    }
-  }
-
-  if (sum != sw_buff[15]) {
-    publish_hex("checksum", sum);
-  }
 }
 
 void publish(const char* topic, std::string payload) {
@@ -187,3 +202,15 @@ std::string job_state(byte val) {
       return "unknown";
   }
 }
+
+
+void processSwBuff_08() {
+  swSer.readBytes(sw_buff, 8);
+  debug.print("0x08: ");
+  for (int i = 0; i < 8; i++) {
+    byte c = sw_buff[i];
+    debug.printf("%02X ", c);
+  }
+  debug.println();
+}
+

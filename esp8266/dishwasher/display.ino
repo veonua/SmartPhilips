@@ -1,6 +1,8 @@
 int d_machine = 0;
 byte ser_buff[16];
 byte ser_old[16];
+byte ser_payload[7] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+char ser_sum = 0;
 
 char dsmall[6];
 
@@ -9,8 +11,7 @@ std::string DPREFIX = "dishwasher/display/";
 void serialHandler() {
   if (!Serial.available()) return;
     
-  char c = Serial.read();
-  //swSer.write(b);
+  char c = Serial.read(); 
     
   switch (d_machine)
   {
@@ -18,66 +19,81 @@ void serialHandler() {
       if (c == 0x07) {
         d_machine = 1;
       };
-      return;
+      break;
     case 1:
-      if (c == 0x22) {
-        processBuff();
+      if (c != 0x22) {
+        d_machine = 0;
+        debug.printf("\n unknown buffer start: 0x%02X\n", c);
+      } else {
+        d_machine = 2;
+        ser_sum = 0x22;
       }
-      d_machine = 0;
+      break;
+    default:
+      d_machine++;
+      c = processSerBuff(d_machine-3, c);
       break;
   }
+  swSer.write(c);
 }
 
-void processBuff() {
-  Serial.readBytes(ser_buff, 7);
-  byte sum = 0x22; 
-    
-  for (int i = 0; i < 6; i++) { 
-    byte c = ser_buff[i];
-    sum += c;
-    if (c == ser_old[i]) continue;
-    ser_old[i] = c;
-    switch (i)
-    {
-      case 0:
-        if (c != 0x00) {
-          d_publish("child_lock", key_state(c));
-        }
-        break;
-      case 1:
-        d_publish("bottle_tab", bottle_tab(c));
-      case 2:
-        d_publish("state", state(c));
-        break;
-      case 3:
-        if (c==0) //always 0x00
-          break;
-      case 4:
-        d_publish("mode", mode(c & 0x0f));
-        break;
-      case 5:
-        d_publish("press", press((c & 0xf0) >> 4));
-        d_publish("baskets", baskets(c & 0x0f));
-        break;
+char processSerBuff(int i, char c) {
+  // override 
+  if (ser_payload[i] != 0xFF) {
+    c = ser_payload[i];
+    ser_payload[i] = 0xFF;
+  }
 
-      default:
-        std::string topic;
-        if (i<10)
-          topic = "unknown/0" + std::to_string(i);
-        else
-          topic = "unknown/" + std::to_string(i);
+  if (i<6) {
+    ser_sum += c;
+  } else {
+    d_machine = 0;
     
-        d_publish_hex((topic+"/hex").c_str(), c);
-        d_publish((topic).c_str(), std::to_string(c));
-        break;
+    if (ser_sum != c) {
+      debug.printf("\n disp checksum error: 0x%02X\n", c);
     }
+
+    return ser_sum;
   }
 
-  if (sum != ser_buff[6]) {
-    d_publish_hex("checksum", sum);
+  if (c == ser_old[i]) return c;
+  ser_old[i] = c;
+  switch (i)
+  {
+    case 0:
+      if (c != 0x00) {
+        d_publish("child_lock", key_state(c));
+      }
+      break;
+    case 1:
+      d_publish("bottle_tab", bottle_tab(c));
+    case 2:
+      d_publish("state", state(c));
+      break;
+    case 3:
+      if (c==0) //always 0x00
+        break;
+    case 4:
+      d_publish("mode", mode(c & 0x0f));
+      break;
+    case 5:
+      d_publish("press", press((c & 0xf0) >> 4));
+      d_publish("baskets", baskets(c & 0x0f));
+      break;
+
+    default:
+      std::string topic;
+      if (i<10)
+        topic = "unknown/0" + std::to_string(i);
+      else
+        topic = "unknown/" + std::to_string(i);
+  
+      d_publish_hex((topic+"/hex").c_str(), c);
+      d_publish((topic).c_str(), std::to_string(c));
+      break;
   }
+  return c;
 }
-
 
 void d_publish(const char* topic, std::string payload) {
   mqttClient.publish((DPREFIX + topic).c_str(), 1, true, payload.c_str(), payload.length());
