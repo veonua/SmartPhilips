@@ -1,6 +1,5 @@
 int m_machine = 0;
-byte sw_buff[18]; 
-byte sw_old[18];
+byte controller_buff[18];
 byte sw_payload[18] {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 char sw_sum = 0;
 
@@ -56,11 +55,17 @@ char processSwBuff_0F(int i, char c) {
     if (sw_sum != c) {
       debug.printf("\n cont checksum error: 0x%02X\n", c);
     }
+
+    if (c != controller_buff[i]) {
+      controller_buff[i] = c;
+      print_c_old();
+    }
+
     return sw_sum;
   }
 
-  if (c == sw_old[i]) return c;
-  sw_old[i] = c;
+  if (c == controller_buff[i]) return c;
+  controller_buff[i] = c;
   switch (i)
   {
     case 1:
@@ -109,9 +114,6 @@ char processSwBuff_0F(int i, char c) {
     // case 14: seconds cound down?
     // heater? 0x55 when temp starts to rise
     // 00, 31, 00 ,2a
-    case 15:
-      print_old();
-      break;    
     default:
       std::string topic;
       if (i<10)
@@ -125,10 +127,10 @@ char processSwBuff_0F(int i, char c) {
   }
 }
 
-void print_old() {
-  debug.print("old: ");
+void print_c_old() {
+  debug.print("c_old: ");
   for (int i = 0; i < 16; i++) {
-    debug.printf("%02X ", sw_old[i]);
+    debug.printf("%02X ", controller_buff[i]);
   }
   debug.println();
 }
@@ -202,15 +204,3 @@ std::string job_state(byte val) {
       return "unknown";
   }
 }
-
-
-void processSwBuff_08() {
-  swSer.readBytes(sw_buff, 8);
-  debug.print("0x08: ");
-  for (int i = 0; i < 8; i++) {
-    byte c = sw_buff[i];
-    debug.printf("%02X ", c);
-  }
-  debug.println();
-}
-

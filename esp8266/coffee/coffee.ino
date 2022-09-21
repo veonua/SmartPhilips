@@ -19,20 +19,14 @@
 #define MQTT_HOST IPAddress(192, 168, 0, 224)
 #define MQTT_PORT 1883
 
-#if defined(ESP8266) && !defined(D5)
-#define D5 (14) //Rx from display
-#define D6 (12) //Tx not used
-#define D7 (13) //Gnd for display (to switch it on and off)
-#endif
-
 #define debug TelnetStream
 const char *hostname = "cofeemaker";
-const char *ssid = "TP-Linak_D5BA";
+const char *ssid = "TP-Link_D5BA";
 const char *password = "wifipassword654";
 
 
 //SoftwareSerial to read Display TX (D5 = RX, D6 = unused)
-SoftwareSerial swSer (D7, D8);
+SoftwareSerial swSer (D2, D1); // RX, TX
 
 #define PARAM_FILE      "/param.json"
 #define AUX_SETTING_URI "/mqtt_setting"
@@ -45,6 +39,8 @@ typedef ESP8266WebServer  WiFiWebServer;
 #elif defined(ARDUINO_ARCH_ESP32)
 typedef WebServer WiFiWebServer;
 #endif
+
+#define GND_BREAKER_PIN D7
 
 AutoConnect  portal;
 AutoConnectConfig config;
@@ -60,16 +56,20 @@ void serialSend(byte command[], int sendCount);
 void redirect(String uri);
 
 //MQTT Settings
-String mqttServer = "192.168.178.99";
+String mqttServer = "192.168.0.224";
 String mqttPort = "1883";
 String mqttUser = "admin";
 String mqttPW = "admin";
 
 
 //commands
-byte powerOn[] =      {0xd5, 0x55, 0x01, 0x01, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x35, 0x05};
+//byte powerOn[] =      {0xd5, 0x55, 0x01, 0x01, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x35, 0x05};
 byte requestInfo[] =  {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01, 0x14};
+
+//                       d5    55.   00    01    03    00    0d    01    00    00    0e    1f.
 byte powerOff[] =     {0xd5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x0d, 0x19};
+
+
 byte hotWater[] =     {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x04, 0x00, 0x00, 0x31, 0x23};
 byte espresso[] =     {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x00, 0x00, 0x19, 0x0F};
 byte coffee[] =       {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x08, 0x00, 0x00, 0x29, 0x3E};
@@ -157,20 +157,7 @@ bool mqttConnect() {
     if (mqttClient.connect(clientId.c_str(), mqttUser.c_str(), mqttPW.c_str())) {
       debug.println("Established:" + clientId);
       mqttClient.publish("coffee/status", "ESP_STARTUP");
-      mqttClient.subscribe("coffee/command/restart");
-      mqttClient.subscribe("coffee/command/powerOn");
-      mqttClient.subscribe("coffee/command/powerOff");
-      mqttClient.subscribe("coffee/command/requestInfo");
-      mqttClient.subscribe("coffee/command/hotWater");
-      mqttClient.subscribe("coffee/command/espresso");
-      mqttClient.subscribe("coffee/command/coffee");
-      mqttClient.subscribe("coffee/command/steam");
-      mqttClient.subscribe("coffee/command/coffeePulver");
-      mqttClient.subscribe("coffee/command/coffeeWater");
-      mqttClient.subscribe("coffee/command/calcNclean");
-      mqttClient.subscribe("coffee/command/aquaClean");
-      mqttClient.subscribe("coffee/command/startPause");
-      mqttClient.subscribe("coffee/command/custom");
+      mqttClient.subscribe("coffee/command/#");
       mqttState.value = "MQTT-State: <b style=\"color: green;\">Connected</b>";
       return true;
     }
@@ -197,7 +184,8 @@ void callback(String topic, byte* message, int length) {
   }
   messageTemp += '\n';
 
-
+  debug.printf("Message arrived on topic: %s Message: %s", topic.c_str(), messageTemp.c_str());
+  
   if (topic == "coffee/command/custom") {
     //For custom hex commands
     runCustomCommand(messageTemp, length);
@@ -207,12 +195,7 @@ void callback(String topic, byte* message, int length) {
     if (count < 0 || count > 99) {
       debug.println("Count out of range");
     } else if (topic == "coffee/command/powerOn") {
-      serialSend(powerOn, count);
-      //Workaround: D7 is connected to a NPN Transistor that cuts the ground from the display
-      //--> MC of the display reboots
-      digitalWrite(D7, LOW);
-      delay(500);
-      digitalWrite(D7, HIGH);
+      powerOn(count);
     } else if (topic == "coffee/command/powerOff") {
       serialSend(powerOff, count);
     } else if (topic == "coffee/command/hotWater") {
@@ -233,8 +216,60 @@ void callback(String topic, byte* message, int length) {
       serialSend(aquaClean, count);
     } else if (topic == "coffee/command/startPause") {
       serialSend(startPause, count);
+    } else if (topic == "coffee/command/detect") {
+      serialDetect();
+    } else if (topic == "coffee/command/restart") {
+      debug.println("Restarting...");
+      ESP.restart();
+    } else if (topic == "coffee/command/delay") {
+      debug.println("Delaying...");
+      delay(count * 1000UL);
+      debug.println(".");
+    } else if (topic == "coffee/command/display") {
+      debug.println("Delaying...");
+      delay(3500);
+      byte cmd3[] = {0xd5, 0x55, 0x00, 0x01, 0x03, 0x00, 0x0d, 0x00, 0x00, 0x20, 0xe2, 0x75};
+      serialSend(cmd3, count);
+
+      // // d555000103000d0000000212
+      debug.println("done.");
     }
+    
   }
+}
+
+///
+void powerOn(int count) {
+  // d5550a0103000d0000001d36 
+  // d555010103000d0000003603
+  // delay 4000
+  // d555000103000d000020e275
+
+  // d5550a0103000d0000001d36
+  // d555010103000d0000003603
+
+  /// gg: d5 55 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 39 0d 
+  /// d555000103000d0000000212
+
+
+  byte cmd1[] = {0xd5, 0x55, 0x0a, 0x01, 0x03, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x1d, 0x36};
+  byte cmd2[] = {0xd5, 0x55, 0x01, 0x01, 0x03, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x36, 0x03};
+
+  //byte powerOnCmd[] =      {0xd5, 0x55, 0x01, 0x01, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x35, 0x05};
+  digitalWrite(GND_BREAKER_PIN, LOW);
+  debug.println("Power ON");
+  serialSend(cmd1, count);
+  serialSend(cmd2, count);
+  
+  delay(300);
+  digitalWrite(GND_BREAKER_PIN, HIGH);
+
+}
+
+void serialDetect() {
+  debug.println("Detecting...");
+  long rate = Serial.detectBaudrate(1000UL);
+  debug.println("Detected baudrate: " + String(rate));
 }
 
 //Executes a custom command (hex string) received via mqtt
@@ -321,7 +356,7 @@ void sendPowerOff(){
 }
 
 void sendPowerOn(){
-  serialSend(powerOn, 5);
+  powerOn(2);
   redirect(AUX_TEST_URI);
 }
 void handleRoot() {
@@ -340,7 +375,9 @@ void setup() {
   delay(1000);
   debug.begin(); // debug port for debugging purposes
   Serial.begin(115200); // Serial communication with coffee machine (Main Controller + ESP)
-  swSer.begin(115200);  // Serial communication to read display TX and give it over to Serial
+  swSer .begin(115200);  // Serial communication to read display TX and give it over to Serial
+  Serial.setTimeout(100);
+  swSer.setTimeout(100);
 
   SPIFFS.begin();
   config.title = "Philips MQTT Coffee Machine";
@@ -370,33 +407,31 @@ void setup() {
   webServer.on("/on", sendPowerOn);
   webServer.on("/off", sendPowerOff);
 
-  pinMode(D7, OUTPUT);
-  digitalWrite(D7, HIGH);
+  pinMode(GND_BREAKER_PIN, OUTPUT);
+  digitalWrite(GND_BREAKER_PIN, HIGH);
 }
 
+int mqtt_attempts = 5;
 
 void loop() {
-  if (swSer.available() > 0) {
-    while (swSer.available() > 0) {
-      Serial.write(swSer.read());
-      //swser();
-    }
-    debug.println(".");
-  }
-  
-//portal.handleClient(); 
   
   WIFI_Connect();
   ArduinoOTA.handle();
 
+  swSerialInput2Mqtt();
+//portal.handleClient(); 
+
   if (WiFi.status() == WL_CONNECTED) {
     //The following things can only be handled if wifi is connected
-    // if (!mqttClient.connected()) {
-    //   delay(1000);
-    //   mqttConnect();
-    // } else {
-    //   mqttClient.loop();
-    // }
+    if (mqtt_attempts > 0) {
+      if (!mqttClient.connected()) {
+        delay(1000);
+        mqttConnect();
+        mqtt_attempts--;
+      } else {
+        mqttClient.loop();
+      }
+    }
     serialInput2Mqtt();
   }
   

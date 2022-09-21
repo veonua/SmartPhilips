@@ -1,41 +1,39 @@
+// swSerial Input
 
-int pos = 0;
-const int buffLen = 10;
-char swBuf[buffLen];
-char swBuf_old[buffLen];
-byte swState = 0;
+const size_t swSer_buf_size = 11;
+char swSerInCommand[swSer_buf_size+1];
+char swSerInCommand_old[swSer_buf_size+1];
+int counter = 0;
 
-void swser() {
-    byte b = swSer.read();
-    Serial.write(b);
-    
-    if (swState == 0) {
-        if (b == 0xd5) {
-            swState = 1;
-        }
-        return;
+void swSerialInput2Mqtt() {
+  size_t len = swSer.available();
+  if (len == 0) return;
+
+  char c = swSer.read();
+  Serial.write(c);
+
+  if (c != 0xd5) {
+    //debug.printf("%02x", c);
+    return;
+  }
+
+  swSer.readBytes(swSerInCommand, swSer_buf_size);
+  Serial.write   (swSerInCommand, swSer_buf_size);
+
+  if (strcmp(swSerInCommand, swSerInCommand_old) == 0) {
+    counter++;
+  } else {
+    debug.printf("\nprev %d. d5 ", counter); 
+    for (int i = 0; i < swSer_buf_size; i++) {
+        debug.printf("%02x", swSerInCommand[i]);
     }
 
-    if (swState == 1) {
-        if (b == 0x55) {
-            swState = 2;
-        } else {
-            swState = 0;
-        }
-        return;
-    }
-
-    swSer.readBytes(swBuf, 8);
-    Serial.write(swBuf, 8);
-
-    if (strncmp(swBuf, swBuf_old, 6) != 0) {
-        debug.print("d5: ");
-        for (int i = 0; i < 6; i++) {
-            debug.printf("%02x ", swBuf[i]);
-        }
+    if (swSerInCommand[0] != 0x55 || swSerInCommand[swSer_buf_size-1] == 0x55) {
+        debug.println (" invalid swSerInCommand, skip");
+    } else {
         debug.println();
-        memcpy( swBuf_old, swBuf, buffLen);
+        memcpy( swSerInCommand_old, swSerInCommand, swSer_buf_size);
+        counter = 0;
     }
-    
-    swState = 0;
+  }
 }

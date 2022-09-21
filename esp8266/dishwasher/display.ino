@@ -1,7 +1,9 @@
 int d_machine = 0;
-byte ser_buff[16];
+
 byte ser_old[16];
 byte ser_payload[7] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+
 char ser_sum = 0;
 
 char dsmall[6];
@@ -53,6 +55,11 @@ char processSerBuff(int i, char c) {
       debug.printf("\n disp checksum error: 0x%02X\n", c);
     }
 
+    if (c != ser_old[i]) {
+      ser_old[i] = c;
+      print_d_old();
+    }
+
     return ser_sum;
   }
 
@@ -69,6 +76,7 @@ char processSerBuff(int i, char c) {
       d_publish("bottle_tab", bottle_tab(c));
     case 2:
       d_publish("state", state(c));
+      d_publish("switch", c/16 == 0 ? "off" : "on");
       break;
     case 3:
       if (c==0) //always 0x00
@@ -93,6 +101,14 @@ char processSerBuff(int i, char c) {
       break;
   }
   return c;
+}
+
+void print_d_old() {
+  debug.print("d_old: ");
+  for (int i = 0; i < 7; i++) {
+    debug.printf("%02X ", ser_old[i]);
+  }
+  debug.println();
 }
 
 void d_publish(const char* topic, std::string payload) {
@@ -226,3 +242,7 @@ std::string key_state(int key_state) { // most likely sound
       return "unknown_"+std::to_string(key_state);
   }
 }
+
+
+
+
