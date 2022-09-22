@@ -40,7 +40,7 @@ typedef ESP8266WebServer  WiFiWebServer;
 typedef WebServer WiFiWebServer;
 #endif
 
-#define GND_BREAKER_PIN D7
+#define GND_BREAKER_PIN D5
 
 AutoConnect  portal;
 AutoConnectConfig config;

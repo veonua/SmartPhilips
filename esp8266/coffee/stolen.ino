@@ -2,26 +2,27 @@ const int LED = 2;
 bool led_state = 0;
 
 void WIFI_Connect() {
-  if (WiFi.status() != WL_CONNECTED) {
-    //WiFi.config(ip, gateway, subnet);
-    debug.println("Connect WiFi...");
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, password);
-    debug.println(WiFi.macAddress());
+  if (WiFi.status() == WL_CONNECTED) return;
 
-    for (int i = 0; i < 50; i++) {
-      if (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        debug.print(".");
-        delay(500);
-        digitalWrite(LED, led_state);
-        led_state != led_state;
-      }
-    }
-    debug.println(WiFi.localIP());
+  //WiFi.config(ip, gateway, subnet);
+  debug.println("Connect WiFi...");
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  debug.println(WiFi.macAddress());
+
+  for (int i = 0; i < 50; i++) {
     if (WiFi.status() != WL_CONNECTED) {
-      ESP.restart();
+      delay(500);
+      debug.print(".");
+      delay(500);
+      digitalWrite(LED, led_state);
+      led_state != led_state;
     }
+  }
+  
+  debug.println(WiFi.localIP());
+  if (WiFi.status() != WL_CONNECTED) {
+    ESP.restart();
   }
 }
 
