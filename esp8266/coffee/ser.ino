@@ -4,7 +4,7 @@ char serInCommand[ser_buf_size+1];
 char serInCommand_old[ser_buf_size+1];
 
 char buff[20];
-
+char buff_old[20];
 
 size_t serInIdx2 = 0;
 size_t serIn = 0;
@@ -29,14 +29,37 @@ inline void serialInput2Mqtt() {
     if(serInIdx2 > 37){
       serInCommand[38] = '\0';
 	    timestampLastSerialMsg = millis();
-      if(strcmp(serInCommand, serInCommand_old) != 0){
-        //mqttClient.publish("coffee/status", serInCommand, 38);
-        debug.printf("publish %s\n", serInCommand);
+      if (strcmp(serInCommand, serInCommand_old) != 0){
+        //debug.printf("publish %s\n", serInCommand);
         memcpy( serInCommand_old, serInCommand, 39);
 
-        std::string brew = selected_brew(buff);
-        mqttClient.publish("coffee/brew", brew.c_str());
+        publish("brew", selected_brew(buff));
+        if (buff_old[2] != buff[2]) {
+          publish("switch", buff[2] == 0x1 ? "off" : "on");
+        }
+        publish("status", status_str(buff));
+
+        if (buff_old[14] != buff[14]) {
+          publish("water_tank", buff[14] == 0x0 ? "ok" : "empty");
+        }
+        
+        if (buff_old[9] != buff[9]) {
+          byte grind = buff[9];
+          if (grind == 0x07) { // grind
+            publish("strength", level(buff[8]));
+          } else {
+            publish("strength", "");
+          }
+          publish("grinder", grinder(grind));
+        }
+
+        if (buff_old[10] != buff[10]) {
+          publish("water", level(buff[10]));
+        }
+
+        memcpy( buff_old, buff, 20);
       }
+
       serInIdx2 = 0;
       serIn = 0;
     }
@@ -44,39 +67,7 @@ inline void serialInput2Mqtt() {
 
 }
 
-// inline void serialInput2Mqtt() {
-//   while(Serial.available() > 0) {
-//     char b = Serial.read();
-//     serInCommand[serInIdx] = b;
-//     serInIdx ++; 
-
-//     //Skip input if it doesn't start with 0xd5
-//     if(serInIdx == 1 && b != 0xd5) {
-//       serInIdx = 0;
-//       debug.printf("%02x.", b);
-//     }
-
-//     if(serInIdx >= ser_buf_size-1){
-//       timestampLastSerialMsg = millis();
-//       if(strcmp(serInCommand, serInCommand_old) != 0){
-//         print_status(serInCommand);
-//         memcpy( serInCommand_old, serInCommand, ser_buf_size);
-//       }
-//       serInIdx = 0;
-//     }
-//   }
-//   //Send signal that the coffee machine is off if there is no incomming message for more than 3 seconds
-//   if(timestampLastSerialMsg != 0 && millis() - timestampLastSerialMsg > 3000){
-//     //client.publish("coffee/status", "d5550100000000000000000000000000000626", 38);
-//     debug.println("timeout");
-//     timestampLastSerialMsg = 0;
-//   }
-// }
-
-// void print_status(char* buffer) {
-//   debug.printf("> ");
-//   for (int i = 0; i < ser_buf_size; i++) {
-//     debug.printf("%02x", buffer[i]);
-//   }
-//   debug.println();
-// }
+void publish(const char* topic, std::string payload) {
+  //debug.printf("publish %s %s\n", topic, payload);
+  mqttClient.publish(("smartthings/coffee/lattego/"+std::string(topic)).c_str(), payload.c_str());
+}
