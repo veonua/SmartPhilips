@@ -1,10 +1,10 @@
 //serial Input
-const size_t ser_buf_size = 39;
-char serInCommand[ser_buf_size+1];
-char serInCommand_old[ser_buf_size+1];
+char serInCommand[40];
 
-char buff[20];
-char buff_old[20];
+const size_t ser_buf_size = 18;
+
+char buff[ser_buf_size+2];
+char buff_old[ser_buf_size+2];
 
 size_t serInIdx2 = 0;
 size_t serIn = 0;
@@ -26,13 +26,11 @@ inline void serialInput2Mqtt() {
       serIn = 0;
     }
 
-    if(serInIdx2 > 37){
+    if(serIn >= ser_buf_size){
       serInCommand[38] = '\0';
 	    timestampLastSerialMsg = millis();
-      if (strcmp(serInCommand, serInCommand_old) != 0){
-        //debug.printf("publish %s\n", serInCommand);
-        memcpy( serInCommand_old, serInCommand, 39);
-
+      if (memcmp(buff, buff_old, ser_buf_size) != 0) {
+      
         publish("brew", selected_brew(buff));
         if (buff_old[2] != buff[2]) {
           publish("switch", buff[2] == 0x1 ? "off" : "on");
