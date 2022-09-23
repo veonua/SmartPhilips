@@ -1,16 +1,16 @@
-std::string level(byte level) {
+int level(byte level) {
   switch (level)
   {
     case 0x0:
-      return "1";
+      return  1;
     case 0x7:
-      return "error?";
+      return -1;
     case 0x38:
-      return "2";
+      return  2;
     case 0x3f:
-      return "3";
+      return  3;
     default:
-      return "unknown "+std::to_string(level);
+      return -2;
   }
 }
 
@@ -90,30 +90,43 @@ const byte STATUS_UNKNOWN = 0x00;
 const byte STATUS_OFF = 0x01;
 const byte STATUS_HEATING = 0x02;
 const byte STATUS_WAITING = 0x03;
-const byte STATUS_WATER_TANK_EMPTY = 0x04;
-const byte STATUS_ERROR = 0x05;
 const byte STATUS_READY = 0x06;
+const byte STATUS_BREWING = 0x07;
 
-byte getStatus(char* buffer) {
+const byte STATUS_ERROR = 0x10;
+const byte STATUS_ERROR_TRESTER = 0x11;
+const byte STATUS_ERROR_NOWATER = 0x12;
+
+
+
+byte get_status(char* buffer) {
   if (buffer[2] == 0x1) 
     return STATUS_OFF;
 
-  if (buffer[15] != 0x00) 
+  if (buffer[15] != 0x00) {
+    if (buffer[15] == 0x07) {
+      return STATUS_ERROR_TRESTER;
+    }
+
     return STATUS_ERROR;
+  }
   if (buffer[14] != 0x00)
-    return STATUS_WATER_TANK_EMPTY;
+    return STATUS_ERROR_NOWATER;
+
   if (buffer[11] == 0x7)
     return STATUS_WAITING;
   if (heating(buffer))
     return STATUS_HEATING;
+  if (buffer[16] == 0x7)
+    return STATUS_BREWING;
   if (ready(buffer))
     return STATUS_READY;
   return STATUS_UNKNOWN;
 }
 
 std::string status_str(char* buffer) {
-  switch (getStatus(buffer))
-    {
+  switch (get_status(buffer))
+  {
     case STATUS_OFF:
         return "off";
     case STATUS_READY:
@@ -122,24 +135,29 @@ std::string status_str(char* buffer) {
         return "heating";
     case STATUS_WAITING:
         return "waiting";
-    case STATUS_WATER_TANK_EMPTY:
-        return "water tank empty";
+    case STATUS_BREWING:
+        return "brewing";
+    
+    case STATUS_ERROR_NOWATER:
+        return "no water";
+    case STATUS_ERROR_TRESTER:
+        return "trester";
     case STATUS_ERROR:
         return "error"; 
     default:
         return "unknown";
-    } 
+  } 
 }
 
 std::string selected_brew(char* buffer) {
-    byte s = getStatus(buffer);
-    if (s == STATUS_WAITING) {
+    byte s = get_status(buffer);
+    if (s == STATUS_WAITING || s == STATUS_BREWING) {
         if (buffer[3] == 0x7) return "espresso";
         if (buffer[3] == 0x38) return "2xespresso";
-        if (buffer[4] == 0x7) return "hot water";
+        if (buffer[4] == 0x7) return "hot_water";
         if (buffer[5] == 0x7) return "coffee";
         if (buffer[5] == 0x38) return "2xcoffee";
-        if (buffer[6] == 0x7) return "capucino";
+        if (buffer[6] == 0x7) return "cappuccino";
     }
 
     return "";

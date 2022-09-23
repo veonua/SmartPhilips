@@ -15,6 +15,7 @@
 #include <PubSubClient.h>
 #include <AutoConnect.h>
 #include <TelnetStream.h>
+#include <queue>
 
 #define MQTT_HOST IPAddress(192, 168, 0, 224)
 #define MQTT_PORT 1883
@@ -52,14 +53,21 @@ char convertCharToHex(char ch);
 void runCustomCommand(String customCmd, int length);
 void callback(String topic, byte* message, int length);
 void serialReadPublish(char newStatus[]);
-void serialSend(byte command[], int sendCount);
+void serialSend(const byte command[], int sendCount);
 void redirect(String uri);
+void powerOn(int count);
 
 //MQTT Settings
 String mqttServer = "192.168.0.224";
 String mqttPort = "1883";
 String mqttUser = "admin";
 String mqttPW = "admin";
+
+// current status
+const size_t ser_buf_size = 18;
+char buff[ser_buf_size+2];
+
+std::queue<std::array<byte, 12>> command_queue;
 
 
 //commands
@@ -71,11 +79,11 @@ byte powerOff[] =     {0xd5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x0
 
 
 byte hotWater[] =     {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x04, 0x00, 0x00, 0x31, 0x23};
-byte espresso[] =     {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x00, 0x00, 0x19, 0x0F};
-byte coffee[] =       {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x08, 0x00, 0x00, 0x29, 0x3E};
+byte espresso[12] =     {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x00, 0x00, 0x19, 0x0F};
+byte coffee[12] =       {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x08, 0x00, 0x00, 0x29, 0x3E};
 byte steam[] =        {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x10, 0x00, 0x00, 0x19, 0x04};
-byte coffeePulver[] = {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x00, 0x02, 0x00, 0x19, 0x0D};
-byte coffeeWater[] =  {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x00, 0x04, 0x00, 0x30, 0x27};
+byte coffeePulver[12] = {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x00, 0x02, 0x00, 0x19, 0x0D};
+byte coffeeWater[12] =  {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x00, 0x04, 0x00, 0x30, 0x27};
 byte calcNclean[] =   {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x00, 0x20, 0x00, 0x38, 0x15};
 byte aquaClean[] =    {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x00, 0x10, 0x00, 0x1D, 0x14};
 byte startPause[] =   {0xD5, 0x55, 0x00, 0x01, 0x00, 0x00, 0x02, 0x00, 0x00, 0x01, 0x09, 0x10};
@@ -158,6 +166,7 @@ bool mqttConnect() {
       debug.println("Established:" + clientId);
       mqttClient.publish("coffee/status", "ESP_STARTUP");
       mqttClient.subscribe("coffee/command/#");
+      mqttClient.subscribe("coffee/set/#");
       mqttState.value = "MQTT-State: <b style=\"color: green;\">Connected</b>";
       return true;
     }
@@ -178,20 +187,28 @@ bool mqttConnect() {
 // your ESP8266 is subscribed you can actually do something
 void callback(String topic, byte* message, int length) {
 
-  String messageTemp;
-  for (int i = 0; i < length; i++) {
-    messageTemp += (char)message[i];
-  }
-  messageTemp += '\n';
+  char messageTemp[100];
+  strncpy(messageTemp, (char*)message, length);
+  messageTemp[length] = '\0';
 
-  debug.printf("Message arrived on topic: %s Message: %s", topic.c_str(), messageTemp.c_str());
+  debug.printf("Message arrived on topic: %s Message: %s\n", topic.c_str(), messageTemp);
   
-  if (topic == "coffee/command/custom") {
+  if (topic == "coffee/set/switch") {
+    set_switch(messageTemp);
+  } else if (topic == "coffee/set/state") {
+    set_state(messageTemp);
+  } else if (topic == "coffee/set/brew") {
+    set_brew(messageTemp);
+  } else if (topic == "coffee/set/water_level") {
+    set_water_level(messageTemp);  
+  } else if (topic == "coffee/set/strength_level") {
+    set_strength_level(messageTemp);
+  } else if (topic == "coffee/command/custom") {
     //For custom hex commands
     runCustomCommand(messageTemp, length);
   } else {
     //For predefined commands
-    int count = messageTemp.toInt();
+    int count = atoi(messageTemp);
     if (count < 0 || count > 99) {
       debug.println("Count out of range");
     } else if (topic == "coffee/command/powerOn") {
@@ -273,7 +290,7 @@ void serialDetect() {
 }
 
 //Executes a custom command (hex string) received via mqtt
-void runCustomCommand(String customCmd, int length) {
+void runCustomCommand(const char* customCmd, int length) {
   byte data2send[length];
   for (int i = 0; i < length / 2; i++) {
     byte extract;
@@ -285,10 +302,17 @@ void runCustomCommand(String customCmd, int length) {
   Serial.write(data2send, length / 2);
 }
 //Sends a command via serial to the coffee machine
-void serialSend(byte command[], int sendCount) {
+void serialSend(const byte command[12], int sendCount) {
+  debug.printf("Sending %d times: ", sendCount);
+  for (int i = 0; i < 12; i++) {
+    debug.printf("%02x", command[i]);
+  }
+  debug.println();
+  
   for (int i = 0; i <= sendCount; i++) {
     Serial.write(command, 12);
   }
+
 }
 
 //Checks if the status of the coffee machine had changed. If so, the new status is published via mqtt
