@@ -27,14 +27,18 @@ inline void serialInput2Mqtt() {
 
         if (get_status(buff) != get_status(buff_old)) {
           publish("status", status_str(buff));
-          publish("brew", selected_brew(buff));
         }
 
+        std::string brew = selected_brew(buff);
+        if (brew != selected_brew(buff_old)) {
+          publish("brew", brew);
+        }
+        
         if (buff_old[14] != buff[14]) {
           publish("water_tank", buff[14] == 0x0 ? "ok" : "empty");
         }
         
-        if (buff_old[9] != buff[9]) {
+        if (buff_old[9] != buff[9] || buff[8] != buff_old[8]) {
           byte grind = buff[9];
           if (grind == 0x07) { // grind
             publish("strength_level", std::to_string(level(buff[8])));

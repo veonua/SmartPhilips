@@ -13,13 +13,13 @@ void set_switch(const char* value) {
 
 
 void set_state(const char* value) {
-    serialSend(startPause, repeat);
-    
-    if (strcmp(value, "cleaning") == 0) {
-        
-    } else {
-        debug.printf("Unknown switch value: %s\n", value);
-    }
+  serialSend(startPause, repeat);
+  
+  if (strcmp(value, "cleaning") == 0 || // brewing
+    strcmp(value, "idle") == 0) {
+  } else {
+    debug.printf("Unknown switch value: %s\n", value);
+  }
 }
 
 void set_brew(const char* value) {
