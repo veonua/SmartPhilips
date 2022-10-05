@@ -164,7 +164,7 @@ bool mqttConnect() {
 
     if (mqttClient.connect(clientId.c_str(), mqttUser.c_str(), mqttPW.c_str())) {
       debug.println("Established:" + clientId);
-      mqttClient.publish("coffee/status", "ESP_STARTUP");
+      mqttClient.publish("coffee/status", "ESP_STARTUP 1.5");
       mqttClient.subscribe("coffee/command/#");
       mqttClient.subscribe("coffee/set/#");
       mqttState.value = "MQTT-State: <b style=\"color: green;\">Connected</b>";

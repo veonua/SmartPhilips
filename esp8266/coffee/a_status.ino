@@ -1,3 +1,17 @@
+const byte STATUS_UNKNOWN = 0x00;
+const byte STATUS_OFF = 0x01;
+const byte STATUS_HEATING = 0x02;
+const byte STATUS_WAITING = 0x03;
+const byte STATUS_READY = 0x06;
+const byte STATUS_BREWING = 0x07;
+
+const byte STATUS_ERROR = 0x10;
+const byte STATUS_ERROR_TRESTER = 0x11;
+const byte STATUS_ERROR_NOWATER = 0x12;
+
+#define repeat 3
+
+
 int level(byte level) {
   switch (level)
   {
@@ -72,12 +86,12 @@ std::string error(byte mode) {
   }
 }
 
-bool heating(char* buffer) {
+inline bool heating(char* buffer) {
     return (buffer[2] == 0x0) && 
     (buffer[3] == 3 || buffer[4] == 3 || buffer[5] == 3 || buffer[6] == 3);
 }
 
-bool ready(char* buffer) {
+inline bool ready(char* buffer) {
     return buffer[15] == 0x00 // no error
         && buffer[14] == 0x00 // water tank ok
         && buffer[13] == 0x00 // calcncclean
@@ -86,20 +100,7 @@ bool ready(char* buffer) {
 }
 
 
-const byte STATUS_UNKNOWN = 0x00;
-const byte STATUS_OFF = 0x01;
-const byte STATUS_HEATING = 0x02;
-const byte STATUS_WAITING = 0x03;
-const byte STATUS_READY = 0x06;
-const byte STATUS_BREWING = 0x07;
-
-const byte STATUS_ERROR = 0x10;
-const byte STATUS_ERROR_TRESTER = 0x11;
-const byte STATUS_ERROR_NOWATER = 0x12;
-
-
-
-byte get_status(char* buffer) {
+inline byte get_status(char* buffer) {
   if (buffer[2] == 0x1) 
     return STATUS_OFF;
 
@@ -124,8 +125,8 @@ byte get_status(char* buffer) {
   return STATUS_UNKNOWN;
 }
 
-std::string status_str(char* buffer) {
-  switch (get_status(buffer))
+std::string status_str(byte status) {
+  switch (status)
   {
     case STATUS_OFF:
         return "off";

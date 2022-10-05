@@ -1,5 +1,4 @@
-#define repeat 5
-#define click_delay 2000
+
 
 void set_switch(const char* value) {
     if (strcmp(value, "on") == 0) {
@@ -31,24 +30,24 @@ void set_brew(const char* value) {
   }
 
   if (brew == "espresso") {
-    serialSend(espresso, repeat);
+    push_command(espresso);
   } else if (brew == "2xespresso") {
-    serialSend(espresso, repeat);
+    push_command(espresso);
     if (_brew != "espresso") {
       push_command(espresso);
     }
 
   } else if (brew == "coffee") {
-    serialSend(coffee, repeat);
+    push_command(coffee);
   } else if (brew == "2xcoffee") {
-    serialSend(coffee, repeat);
+    push_command(coffee);
     if (_brew != "coffee") {
       push_command(coffee);
     }
   } else if (brew == "cappuccino") {
-    serialSend(steam, repeat);
+    push_command(steam);
   } else if (brew == "hot water" || brew == "hot_water") {
-    serialSend(hotWater, repeat);
+    push_command(hotWater);
   } else {
     debug.printf("Unknown brew value: %s\n", value);
   }
@@ -73,8 +72,7 @@ void set_level(int current_level, const char* value, const byte command[12]) {
 
     debug.printf("current_level: %d, selected_level: %d, count: %d\n", current_level, selected_level, count);
 
-    serialSend(command, repeat);
-    for (int i = 0; i < count-1; i++) {
+    for (int i = 0; i < count; i++) {
         push_command(command);
     }
 }
