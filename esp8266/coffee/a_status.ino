@@ -1,9 +1,9 @@
 const byte STATUS_UNKNOWN = 0x00;
 const byte STATUS_OFF = 0x01;
 const byte STATUS_HEATING = 0x02;
-const byte STATUS_WAITING = 0x03;
-const byte STATUS_READY = 0x06;
-const byte STATUS_BREWING = 0x07;
+const byte STATUS_SELECT_BREW = 0x03;
+const byte STATUS_SELECTED = 0x04;
+const byte STATUS_BREWING = 0x05;
 
 const byte STATUS_ERROR = 0x10;
 const byte STATUS_ERROR_TRESTER = 0x11;
@@ -91,12 +91,15 @@ inline bool heating(char* buffer) {
     (buffer[3] == 3 || buffer[4] == 3 || buffer[5] == 3 || buffer[6] == 3);
 }
 
-inline bool ready(char* buffer) {
+inline bool not_selected(char* buffer) {
     return buffer[15] == 0x00 // no error
         && buffer[14] == 0x00 // water tank ok
         && buffer[13] == 0x00 // calcncclean
         && buffer[12] == 0x00 // aquaclean
-        && !heating(buffer);
+        && buffer[3] == 0x07
+        && buffer[4] == 0x07
+        && buffer[5] == 0x07
+        && buffer[6] == 0x07;
 }
 
 
@@ -115,13 +118,13 @@ inline byte get_status(char* buffer) {
     return STATUS_ERROR_NOWATER;
 
   if (buffer[11] == 0x7)
-    return STATUS_WAITING;
+    return STATUS_SELECTED;
   if (heating(buffer))
     return STATUS_HEATING;
   if (buffer[16] == 0x7)
     return STATUS_BREWING;
-  if (ready(buffer))
-    return STATUS_READY;
+  if (not_selected(buffer))
+    return STATUS_SELECT_BREW;
   return STATUS_UNKNOWN;
 }
 
@@ -130,11 +133,11 @@ std::string status_str(byte status) {
   {
     case STATUS_OFF:
         return "off";
-    case STATUS_READY:
+    case STATUS_SELECT_BREW:
         return "ready";
     case STATUS_HEATING:
         return "heating";
-    case STATUS_WAITING:
+    case STATUS_SELECTED:
         return "waiting";
     case STATUS_BREWING:
         return "brewing";
@@ -152,7 +155,7 @@ std::string status_str(byte status) {
 
 std::string selected_brew(char* buffer) {
     byte s = get_status(buffer);
-    if (s == STATUS_WAITING || s == STATUS_BREWING) {
+    if (s == STATUS_SELECTED || s == STATUS_BREWING) {
         if (buffer[3] == 0x7) return "espresso";
         if (buffer[3] == 0x38) return "2xespresso";
         if (buffer[4] == 0x7) return "hot_water";

@@ -3,7 +3,6 @@ char buff_old[ser_buf_size+2];
 
 size_t serIn = 0;
 
-unsigned long lastPush = 0;
 unsigned long lastChange = 0;
 
 inline void serialInput2Mqtt() {
@@ -27,10 +26,11 @@ inline void serialInput2Mqtt() {
         if (buff_old[2] != buff[2]) {
           publish("switch", buff[2] == 0x1 ? "off" : "on");
         }
+
         if (status != get_status(buff_old)) {
           publish("status", status_str(status));
 
-          if (status != STATUS_WAITING && status != STATUS_READY) {
+          if (status != STATUS_SELECTED && status != STATUS_SELECT_BREW && status != STATUS_BREWING) {
             publish("brew", "");
             publish("strength_level", "0");
             publish("grinder", "none");
@@ -46,7 +46,7 @@ inline void serialInput2Mqtt() {
           publish("error", error(buff[15]));
         }
         
-        if (status == STATUS_WAITING) {
+        if (status == STATUS_SELECTED) {
           std::string brew = selected_brew(buff);
           if ( brew != selected_brew(buff_old) && brew != "") {
             publish("brew", brew);
@@ -75,9 +75,9 @@ inline void serialInput2Mqtt() {
       if (command_queue.size() > 0) {
         unsigned long now = millis();
         if (now - lastPush > 300) {
-          bool ready = (status == STATUS_READY) || (status == STATUS_WAITING);
+          bool ready = (status == STATUS_SELECT_BREW) || (status == STATUS_SELECTED);
           if (ready) {
-            debug.printf("commands: %d now: %d, last: %d \n", command_queue.size(), now, lastPush);
+            debug.printf("status: %s commands: %d now: %d, last: %d \n", status_str(status).c_str(), command_queue.size(), now, lastPush);
 
             lastPush = now;
 

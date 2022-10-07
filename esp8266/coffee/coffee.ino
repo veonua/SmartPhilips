@@ -68,6 +68,7 @@ const size_t ser_buf_size = 18;
 char buff[ser_buf_size+2];
 
 std::queue<std::array<byte, 12>> command_queue;
+unsigned long lastPush = 0;
 
 
 //commands
@@ -164,7 +165,7 @@ bool mqttConnect() {
 
     if (mqttClient.connect(clientId.c_str(), mqttUser.c_str(), mqttPW.c_str())) {
       debug.println("Established:" + clientId);
-      mqttClient.publish("coffee/status", "ESP_STARTUP 1.5");
+      mqttClient.publish("coffee/status", "ESP_STARTUP 1.9");
       mqttClient.subscribe("coffee/command/#");
       mqttClient.subscribe("coffee/set/#");
       mqttState.value = "MQTT-State: <b style=\"color: green;\">Connected</b>";
@@ -192,7 +193,7 @@ void callback(String topic, byte* message, int length) {
   messageTemp[length] = '\0';
 
   debug.printf("Message arrived on topic: %s Message: %s\n", topic.c_str(), messageTemp);
-  
+   
   if (topic == "coffee/set/switch") {
     set_switch(messageTemp);
   } else if (topic == "coffee/set/state") {
@@ -203,6 +204,8 @@ void callback(String topic, byte* message, int length) {
     set_water_level(messageTemp);  
   } else if (topic == "coffee/set/strength_level") {
     set_strength_level(messageTemp);
+  } else if (topic == "coffee/command/preset1") {
+    run_preset(messageTemp);
   } else if (topic == "coffee/command/custom") {
     //For custom hex commands
     runCustomCommand(messageTemp, length);
@@ -242,45 +245,8 @@ void callback(String topic, byte* message, int length) {
       debug.println("Delaying...");
       delay(count * 1000UL);
       debug.println(".");
-    } else if (topic == "coffee/command/display") {
-      debug.println("Delaying...");
-      delay(3500);
-      byte cmd3[] = {0xd5, 0x55, 0x00, 0x01, 0x03, 0x00, 0x0d, 0x00, 0x00, 0x20, 0xe2, 0x75};
-      serialSend(cmd3, count);
-
-      // // d555000103000d0000000212
-      debug.println("done.");
-    }
-    
+    } 
   }
-}
-
-///
-void powerOn(int count) {
-  // d5550a0103000d0000001d36 
-  // d555010103000d0000003603
-  // delay 4000
-  // d555000103000d000020e275
-
-  // d5550a0103000d0000001d36
-  // d555010103000d0000003603
-
-  /// gg: d5 55 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 39 0d 
-  /// d555000103000d0000000212
-
-
-  byte cmd1[] = {0xd5, 0x55, 0x0a, 0x01, 0x03, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x1d, 0x36};
-  byte cmd2[] = {0xd5, 0x55, 0x01, 0x01, 0x03, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x36, 0x03};
-
-  //byte powerOnCmd[] =      {0xd5, 0x55, 0x01, 0x01, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x35, 0x05};
-  digitalWrite(GND_BREAKER_PIN, LOW);
-  debug.println("Power ON");
-  serialSend(cmd1, count);
-  serialSend(cmd2, count);
-  
-  delay(300);
-  digitalWrite(GND_BREAKER_PIN, HIGH);
-
 }
 
 void serialDetect() {

@@ -63,8 +63,7 @@ void onMqttConnect(bool sessionPresent) {
   
   mqttClient.publish(hostname, 1, true, "hello", 5);
   
-  String sub1 = "/#";
-  String subs = hostname + sub1;
+  String subs = String(hostname) + "/set/#";
   mqttClient.subscribe(subs.c_str(), 1);
 }
 
@@ -123,13 +122,13 @@ void onMqttMessage(char *topic, char *_payload,
       ser_payload[index] = hex2bin(payload);
       debug.printf("index: %d, payload: %s, ser_payload: %d\n", index, payload, ser_payload[index]);
     }
-  } else if (strcmp(topic, "state/set") == 0) {
+  } else if (strcmp(topic, "set/state") == 0) {
     set_state(payload);
-  } else if (strcmp(topic, "switch") == 0) {
+  } else if (strcmp(topic, "set/switch") == 0) {
     set_switch(payload);
-  }else if (strcmp(topic, "mode/set") == 0) {
+  }else if (strcmp(topic, "set/mode") == 0) {
     set_mode(payload);
-  } else if (strcmp(topic, "baskets/set") == 0) {
+  } else if (strcmp(topic, "set/baskets") == 0) {
     set_baskets(payload);
   } else if (strcmp(topic, "turn_on") == 0) {
     turn_on();
@@ -239,7 +238,7 @@ void finish() {
     ser_payload[2] = 0x40; 
 }
 
-byte hex2bin(const char *hex) {
+inline byte hex2bin(const char *hex) {
   char a = hex[0];
   char b = hex[1];
   if (a >= '0' && a <= '9') a -= '0';

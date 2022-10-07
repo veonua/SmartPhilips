@@ -2,10 +2,6 @@ int m_machine = 0;
 byte controller_buff[18];
 byte sw_payload[18] {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 char sw_sum = 0;
-
-byte temperature = 20;
-
-
 char small[6];
 
 std::string PREFIX = "smartthings/dishwasher/samsung/";
@@ -82,15 +78,15 @@ char processSwBuff_0F(int i, char c) {
       publish("next_cycle_in", std::to_string(c)); 
       break;
     // case 5: 0x15 or 0x00 -- nothing while washing
-    case 6: 
-      publish("water/level", std::to_string(c)); // maybe water level
-      break;
-    case 7:
-      if ( abs(temperature - c) > 1) { // reports way too often otherwise
-        temperature = c;
-        publish("temperature", std::to_string(c));
-      }
-      break;
+    // case 6: 
+    //   publish("water/level", std::to_string(c)); // maybe water level
+    //   break;
+    // case 7:
+    //   if ( abs(temperature - c) > 1) { // reports way too often otherwise
+    //     temperature = c;
+    //     publish("temperature", std::to_string(c));
+    //   }
+    //   break;
     // case 8: 0x55 0x0f 0x8/0x10/0x18/0x80 then 0x0  
     // nothing while washing
     case 9:
@@ -122,7 +118,7 @@ char processSwBuff_0F(int i, char c) {
         topic = "unknown/" + std::to_string(i);
   
       publish_hex((topic+"/hex").c_str(), c);
-      publish((topic).c_str(), std::to_string(c));
+      //publish((topic).c_str(), std::to_string(c));
       break;
   }
 }
