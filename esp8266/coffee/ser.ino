@@ -98,5 +98,5 @@ inline void serialInput2Mqtt() {
 
 void publish(const char* topic, std::string payload) {
   //debug.printf("publish %s %s\n", topic, payload);
-  mqttClient.publish(("smartthings/coffee/lattego/"+std::string(topic)).c_str(), payload.c_str());
+  mqttClient.publish(("smartthings/coffee/lattego/"+std::string(topic)).c_str(), 1, true, payload.c_str(), payload.length());
 }

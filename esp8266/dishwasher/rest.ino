@@ -10,7 +10,7 @@ void handle_root() {
 }
 
 void handle_status() {
-    std::string door = (controller_buff[11] & 0x0f) == 8 ? "open" : "closed";
+    std::string door = isDoorOpen() ? "open" : "closed";
 
     std::string response = "{";
     response += "\"state\":\"" + state(controller_buff[1]) +"\",";

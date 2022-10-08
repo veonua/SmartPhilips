@@ -18,14 +18,10 @@ void powerOn(int count) {
 
   //byte powerOnCmd[] =      {0xd5, 0x55, 0x01, 0x01, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x35, 0x05};
   digitalWrite(GND_BREAKER_PIN, LOW);
+  displayOff = true;
   debug.println("Power ON");
   serialSend(cmd1, count);
   serialSend(cmd2, count);
-  
-  delay(300);
-  digitalWrite(GND_BREAKER_PIN, HIGH);
-
-  lastPush = millis();
 }
 
 void set_switch(const char* value) {
@@ -50,6 +46,10 @@ void set_state(const char* value) {
 }
 
 void set_brew(const char* value) {
+  if (strlen(value) == 0) {
+    return;
+  }
+
   byte status = get_status(buff);
 
   if (status == STATUS_OFF) {

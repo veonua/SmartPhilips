@@ -1,6 +1,5 @@
 int m_machine = 0;
 byte controller_buff[18];
-byte sw_payload[18] {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 char sw_sum = 0;
 char small[6];
 
@@ -38,11 +37,6 @@ void serial2Handler() {
 }
 
 char processSwBuff_0F(int i, char c) {
-  if (sw_payload[i] != 0xFF) {
-    c = sw_payload[i];
-    sw_payload[i] = 0xFF;
-  }
-
   if (i<15) {
     sw_sum += c;
   } else {
@@ -66,6 +60,7 @@ char processSwBuff_0F(int i, char c) {
   {
     case 1:
       publish("state", state(c));
+      publish("switch", c/16 == 0 ? "off" : "on");
       break;
     case 2:
       publish("job_state", job_state(c));
@@ -118,6 +113,10 @@ char processSwBuff_0F(int i, char c) {
       //publish((topic).c_str(), std::to_string(c));
       break;
   }
+}
+
+bool isDoorOpen() {
+  return controller_buff[11] & 0x0f == 8;
 }
 
 void print_c_old() {

@@ -12,8 +12,8 @@ const byte STATUS_ERROR_NOWATER = 0x12;
 #define repeat 3
 
 
-int level(byte level) {
-  switch (level)
+int level(byte value) {
+  switch (value)
   {
     case 0x0:
       return  1;

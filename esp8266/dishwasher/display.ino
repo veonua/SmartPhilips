@@ -42,8 +42,26 @@ void serialHandler() {
 char processSerBuff(int i, char c) {
   // override 
   if (ser_payload[i] != 0xFF) {
-    c = ser_payload[i];
-    ser_payload[i] = 0xFF;
+    byte over = ser_payload[i];
+    if (i==2 && over > turn_on_cmd) { // power on, run
+      debug.printf("overriding status: %d -> %d\n", c, over);
+      
+      if (isDoorOpen()) {
+        debug.printf("Door is open, don't run!\n");
+        ser_payload[i] = 0xFF;
+      } else if (c < turn_on_cmd) { // turn on before start
+        c = turn_on_cmd;
+        debug.printf("turning on\n");
+      } else {
+        c = over;
+        ser_payload[i] = 0xFF;
+        debug.printf("Override %d: %02X\n", i, c);
+      }
+    } else {
+      c = over;
+      ser_payload[i] = 0xFF;
+      debug.printf("Override %d: %02X\n", i, c);
+    }
   }
 
   if (i<6) {
@@ -76,7 +94,6 @@ char processSerBuff(int i, char c) {
       d_publish("bottle_tab", bottle_tab(c));
     case 2:
       d_publish("state", state(c));
-      d_publish("switch", c/16 == 0 ? "off" : "on");
       break;
     case 3:
       if (c==0) //always 0x00
