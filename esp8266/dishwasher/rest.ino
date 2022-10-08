@@ -1,8 +1,15 @@
-void handleRoot() {
+void webserver_init() {
+  server.on("/", handle_root);
+  server.on("/state", handle_status);
+  server.onNotFound(handle_notfound);
+  server.begin();
+}
+
+void handle_root() {
   server.send(200, "text/plain", "hello from dishwasher!\r\n");
 }
 
-void apiStatus() {
+void handle_status() {
     std::string door = (controller_buff[11] & 0x0f) == 8 ? "open" : "closed";
 
     std::string response = "{";
@@ -25,7 +32,7 @@ std::string json_bool(bool b) {
     return b ? "true" : "false";
 }
 
-void handleNotFound() {
+void handle_notfound() {
   String message = "File Not Found\n\n";
   message += "URI: ";
   message += server.uri();

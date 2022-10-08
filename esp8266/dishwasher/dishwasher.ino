@@ -12,19 +12,15 @@
 
 #define debug TelnetStream
 
-#define MQTT_HOST IPAddress(192, 168, 0, 224)
-#define MQTT_PORT 1883
-const char *hostname = "dishwasher";
-
 SoftwareSerial swSer (D2, D1); // RX, TX
-
 AsyncMqttClient mqttClient;
 ESP8266WebServer server(80);
 WiFiClient espClient;
 
 //*************globals*************
-const byte buff_size = 255;
 byte debugIdx = 0;
+const char *hostname = "dishwasher";
+const size_t host_len = strlen(hostname);
 
 
 void setup() {
@@ -38,14 +34,7 @@ void setup() {
   mqtt_connect();
   otastart();
   
-  if (MDNS.begin(hostname)) {
-    debug.println("MDNS responder started");
-  }
-
-  server.on("/", handleRoot);
-  server.on("/state", apiStatus);
-  server.onNotFound(handleNotFound);
-  server.begin();
+  webserver_init();
 }
 
 void loop() {

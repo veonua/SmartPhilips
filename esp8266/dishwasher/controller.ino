@@ -112,10 +112,7 @@ char processSwBuff_0F(int i, char c) {
     // 00, 31, 00 ,2a
     default:
       std::string topic;
-      if (i<10)
-        topic = "unknown/0" + std::to_string(i);
-      else
-        topic = "unknown/" + std::to_string(i);
+      topic = "unknown/" + std::to_string(i);
   
       publish_hex((topic+"/hex").c_str(), c);
       //publish((topic).c_str(), std::to_string(c));
