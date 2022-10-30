@@ -1,7 +1,11 @@
 int m_machine = 0;
-byte controller_buff[18];
-char sw_sum = 0;
-char small[6];
+#define controller_buff_len 15
+byte controller_buff[controller_buff_len];
+byte old_controller_buff[controller_buff_len];
+byte sw_sum = 0;
+byte old_sw_sum = 0;
+byte temperature = 0;
+
 
 std::string PREFIX = "smartthings/dishwasher/samsung/";
 
@@ -20,17 +24,87 @@ void serial2Handler() {
       }
       break;
     case 1:
-      sw_sum = 0;
       if (c == 0x0F) {
         m_machine = 2;
+        sw_sum = 0;
       } else {
         debug.printf("\n unknown buffer start: 0x%02X\n", c);
         m_machine = 0;
       }
       break;
+    /***/
+    case 17: {
+      m_machine = 0;
+      if (sw_sum != c) {
+        debug.printf("\n cont checksum error: 0x%02X\n", c);
+        break;
+      }
+
+      if (old_sw_sum == sw_sum) {
+        //debug.printf("\n cont checksum same: 0x%02X\n", c);
+        break;
+      }
+
+      if (old_controller_buff[1] != controller_buff[1]) {
+        byte _state = controller_buff[1];
+        publish("state", state(_state));
+        publish("switch", _state/16 == 0 ? "off" : "on");
+      }
+      if (old_controller_buff[2] != controller_buff[2]) {
+        byte _jobState = controller_buff[2];
+        publish("jobState", job_state(_jobState));
+        publish_hex("jobState/hex", _jobState);
+      }
+      if (old_controller_buff[3] != controller_buff[3]) {
+        publish("completion_min", std::to_string(controller_buff[3])); // time till end
+      }
+      if (old_controller_buff[4] != controller_buff[4]) {
+        publish("next_cycle_in", std::to_string(controller_buff[4]));
+      }
+
+      if (old_controller_buff[7] != controller_buff[7]) {
+        byte temp = controller_buff[7];
+        
+        if ( abs(temperature - temp) > 1) { // reports way too often otherwise
+           temperature = temp;
+           publish("temperature", std::to_string(temperature));
+        }
+      }
+      
+      if (old_controller_buff[9] != controller_buff[9]) {
+        byte b9 = controller_buff[9];
+        publish("baskets", baskets((b9 & 0xf0) >> 4));
+        publish("mode", mode(b9 & 0x0f));
+      }
+      // if (old_controller_buff[10] != controller_buff[10]) {
+      //   byte c_water_hardness = controller_buff[10] >> 3; 
+      //   publish("water_hardness/level", std::to_string(c_water_hardness));
+      //   publish("water_hardness/salt_gram", water_hardness(c_water_hardness));
+      // }
+      if (old_controller_buff[11] != controller_buff[11]) {
+        byte b11 = controller_buff[11];
+        publish("contact", (b11 & 0x0f) == 8 ? "open" : "closed");
+        publish_hex("contact/hex", b11);
+      }
+      
+      if (old_controller_buff[12] != controller_buff[12]) {
+        byte b12 = controller_buff[12];
+        publish("bottle_tab", bottle_tab(b12 & 0x0f));
+        publish_hex("bottle_tab/hex", b12);
+      }
+
+      
+      memcpy(old_controller_buff, controller_buff, controller_buff_len);
+      old_sw_sum = sw_sum;
+      break;
+    }
+    /***/
+
     default:
+      sw_sum += c;
       m_machine++;
-      c = processSwBuff_0F(m_machine-3, c);
+      controller_buff[m_machine-3] = c;
+      //c = processSwBuff_0F(m_machine-3, c);
       break;
   }
   Serial.write(c);
@@ -44,6 +118,16 @@ char processSwBuff_0F(int i, char c) {
     
     if (sw_sum != c) {
       debug.printf("\n cont checksum error: 0x%02X\n", c);
+    } else {
+
+      char _state = controller_buff[1];
+      publish("state", state(_state));
+      publish("switch", _state/16 == 0 ? "off" : "on");
+      
+      char jobState = controller_buff[2];
+      publish("job_state", job_state(jobState));
+      publish_hex("job_state/hex", jobState);
+
     }
 
     if (c != controller_buff[i]) {
@@ -58,14 +142,6 @@ char processSwBuff_0F(int i, char c) {
   controller_buff[i] = c;
   switch (i)
   {
-    case 1:
-      publish("state", state(c));
-      publish("switch", c/16 == 0 ? "off" : "on");
-      break;
-    case 2:
-      publish("job_state", job_state(c));
-      publish_hex("job_state/hex", c);
-      break;
     case 3: 
       publish("completion_min", std::to_string(c)); // time till end
       break;
@@ -105,13 +181,12 @@ char processSwBuff_0F(int i, char c) {
     // case 14: seconds cound down?
     // heater? 0x55 when temp starts to rise
     // 00, 31, 00 ,2a
-    default:
-      std::string topic;
-      topic = "unknown/" + std::to_string(i);
-  
-      publish_hex((topic+"/hex").c_str(), c);
-      //publish((topic).c_str(), std::to_string(c));
-      break;
+    //default:
+      //std::string topic = "unknown/" + std::to_string(i);
+    
+      // publish_hex((topic+"/hex").c_str(), c);
+      // publish((topic).c_str(), std::to_string(c));
+    //  break;
   }
 }
 
@@ -133,6 +208,7 @@ void publish(const char* topic, std::string payload) {
 }
 
 void publish_hex(const char* topic, byte value) {
+  char small[6];
   sprintf(small, "0x%02x", value);      
   mqttClient.publish((PREFIX + topic).c_str(), 1, true, small, strlen(small));
   //debug.printf("%s: 0x%02x\n", topic, value);

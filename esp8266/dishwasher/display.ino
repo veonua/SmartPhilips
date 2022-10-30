@@ -1,12 +1,11 @@
 int d_machine = 0;
 
-byte ser_old[16];
+byte ser_old[16*2];
 byte ser_payload[7] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 
 char ser_sum = 0;
 
-char dsmall[6];
 
 std::string DPREFIX = "dishwasher/display/";
 
@@ -41,7 +40,7 @@ void serialHandler() {
 
 char processSerBuff(int i, char c) {
   // override 
-  if (ser_payload[i] != 0xFF) {
+  if (i<6 && ser_payload[i] != 0xFF) {
     byte over = ser_payload[i];
     if (i==2 && over > turn_on_cmd) { // power on, run
       debug.printf("overriding status: %d -> %d\n", c, over);
@@ -134,12 +133,13 @@ void d_publish(const char* topic, std::string payload) {
 }
 
 void d_publish_hex(const char* topic, byte value) {
+  char dsmall[6];
   sprintf(dsmall, "0x%02x", value);      
   mqttClient.publish((DPREFIX + topic).c_str(), 1, true, dsmall, strlen(dsmall));
   //debug.printf("%s: 0x%02x\n", topic, value);
 }
 
-std::string press(byte press){
+inline std::string press(byte press){
   switch (press)
   {
     case 0:
@@ -152,7 +152,7 @@ std::string press(byte press){
 }
 
 
-std::string mode(byte mode){
+inline std::string mode(byte mode){
   switch (mode) {
     case 0x00:
       return "finish";
@@ -175,7 +175,7 @@ std::string mode(byte mode){
   }
 }
 
-std::string baskets(byte baskets){
+inline std::string baskets(byte baskets){
   switch (baskets) {
     case 0x01:
       return "top";
@@ -188,7 +188,7 @@ std::string baskets(byte baskets){
   }
 }
 
-std::string bottle_tab(int bottle_tab) {
+inline std::string bottle_tab(int bottle_tab) {
   switch (bottle_tab) {
     case 0x00:
       return "none";
@@ -201,7 +201,7 @@ std::string bottle_tab(int bottle_tab) {
   }
 }
 
-std::string state(int state) {
+inline std::string state(int state) {
   switch (state) {
     case 0x00:
     case 0x02:
@@ -239,7 +239,7 @@ std::string state(int state) {
   }
 }
 
-std::string key_state(int key_state) { // most likely sound
+inline std::string key_state(int key_state) { // most likely sound
   switch (key_state) {
     case 0x00: // button is not pressed
       return "none";

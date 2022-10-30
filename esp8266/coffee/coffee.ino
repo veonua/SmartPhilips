@@ -151,4 +151,5 @@ void loop() {
       
     lastPush = millis();
   }
+  delay(5);
 }

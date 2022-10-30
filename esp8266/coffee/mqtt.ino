@@ -45,8 +45,8 @@ void onMqttMessage(char *topic, char *_payload,
     serialSend(calcNclean, repeat);
   } else if (strcmp(topic, "aquaClean") == 0) {
     serialSend(aquaClean, repeat);
-  } else if (strcmp(topic, "startPause") == 0) {
-    serialSend(startPause, repeat);
+  //} else if (strcmp(topic, "startPause") == 0) {
+  //  serialSend(startPause, repeat);
   } else if (strcmp(topic, "restart") == 0) {
     debug.println("Restarting...");
     ESP.restart();

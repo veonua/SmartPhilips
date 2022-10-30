@@ -29,7 +29,7 @@ void otastart() {
     else if (error == OTA_END_ERROR) debug.println("End Failed");
   });
   ArduinoOTA.begin();
-  debug.println("Ready");
+
   debug.print("IP address: ");
   debug.println(WiFi.localIP());
 }

@@ -45,6 +45,7 @@ void loop() {
   
   serialHandler();
   serial2Handler();
+  delay(1);
 }
 
 

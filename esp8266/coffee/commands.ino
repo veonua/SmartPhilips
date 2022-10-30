@@ -36,7 +36,8 @@ void set_switch(const char* value) {
 
 
 void set_state(const char* value) {
-  serialSend(startPause, repeat);
+  debug.printf("set_state: %s\n", value);
+  //serialSend(startPause, repeat);
   
   if (strcmp(value, "cleaning") == 0 || // brewing
     strcmp(value, "idle") == 0) {
@@ -90,7 +91,7 @@ void set_brew(const char* value) {
 
 
 void set_level(int current_level, const char* value, const byte command[12]) {
-  byte status = get_status(buff);
+    byte status = get_status(buff);
 
     if (status != STATUS_SELECTED) {
       debug.printf("Machine is not ready!\n");
