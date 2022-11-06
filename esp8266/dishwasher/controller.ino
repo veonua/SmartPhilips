@@ -4,7 +4,10 @@ byte controller_buff[controller_buff_len];
 byte old_controller_buff[controller_buff_len];
 byte sw_sum = 0;
 byte old_sw_sum = 0;
-byte temperature = 0;
+
+float temperature = 0f;
+float tempBuff = 0f;
+byte tempBuffSize = 0;
 
 
 std::string PREFIX = "smartthings/dishwasher/samsung/";
@@ -64,8 +67,15 @@ void serial2Handler() {
 
       if (old_controller_buff[7] != controller_buff[7]) {
         byte temp = controller_buff[7];
+        tempBuff + temp;
+        if (tempBuffSize < 10) {
+          tempBuffSize++;
+        }
         
-        if ( abs(temperature - temp) > 1) { // reports way too often otherwise
+        float avg = tempBuff / tempBuffSize;
+        tempBuff -= avg;
+        
+        if ( abs(temperature - avg) > 0.5) { // reports way too often otherwise
            temperature = temp;
            publish("temperature", std::to_string(temperature));
         }
@@ -82,9 +92,8 @@ void serial2Handler() {
       //   publish("water_hardness/salt_gram", water_hardness(c_water_hardness));
       // }
       if (old_controller_buff[11] != controller_buff[11]) {
-        byte b11 = controller_buff[11];
-        publish("contact", (b11 & 0x0f) == 8 ? "open" : "closed");
-        publish_hex("contact/hex", b11);
+        publish("contact", isDoorOpen() ? "open" : "closed");
+        publish_hex("contact/hex", controller_buff[11]);
       }
       
       if (old_controller_buff[12] != controller_buff[12]) {
@@ -190,8 +199,8 @@ char processSwBuff_0F(int i, char c) {
   }
 }
 
-bool isDoorOpen() {
-  return controller_buff[11] & 0x0f == 8;
+inline bool isDoorOpen() {
+  return (controller_buff[11] & 0x0f) == 8;
 }
 
 void print_c_old() {
@@ -202,19 +211,19 @@ void print_c_old() {
   debug.println();
 }
 
-void publish(const char* topic, std::string payload) {
+inline void publish(const char* topic, std::string payload) {
   mqttClient.publish((PREFIX + topic).c_str(), 1, true, payload.c_str(), payload.length());
   //debug.printf("%s: %s\n", topic, payload.c_str());
 }
 
-void publish_hex(const char* topic, byte value) {
+inline void publish_hex(const char* topic, byte value) {
   char small[6];
   sprintf(small, "0x%02x", value);      
   mqttClient.publish((PREFIX + topic).c_str(), 1, true, small, strlen(small));
   //debug.printf("%s: 0x%02x\n", topic, value);
 }
 
-std::string water_hardness(byte c_water_hardness) {
+inline std::string water_hardness(byte c_water_hardness) {
   switch (c_water_hardness)
   {
     case 1:
@@ -234,7 +243,7 @@ std::string water_hardness(byte c_water_hardness) {
   }
 }
 
-std::string job_state(byte val) {
+inline std::string job_state(byte val) {
   switch (val){
     case 0x01:
       return "pump";    
