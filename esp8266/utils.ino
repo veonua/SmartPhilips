@@ -2,7 +2,7 @@
 #define MQTT_PORT 1883
 
 const char *ssid = "TP-Link_D5BA";
-const char *password = "wifipassword654";
+const char *password = "";
 
 // MQTT
 bool led_state = true;

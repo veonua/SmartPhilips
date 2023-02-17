@@ -86,7 +86,7 @@ void offmode() {
 
 void watchdog() {
   static long int timer = 0;
-  if ((millis() - timer) > 60000) { //   1 minute
+  if ((millis() - timer) > 600000) { //   10 minute
     timer = millis();
     dowatchdog();
   }
@@ -492,9 +492,7 @@ void send_code(int function_code, int function_value, int rcv_code) {
   mylist[12] = function_code;
   mylist[13] = function_value;
   mylist[14] = checksum(function_value, function_code);
-  //for (int i = 0; i < 2; i++) {
   report(mylist, sizeof(mylist) / sizeof(mylist[0]));
-  //}
   getcode(function_code, rcv_code);
 }
 
