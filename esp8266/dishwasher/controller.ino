@@ -5,12 +5,18 @@ byte old_controller_buff[controller_buff_len];
 byte sw_sum = 0;
 byte old_sw_sum = 0;
 
-float temperature = 0f;
-float tempBuff = 0f;
+float temperature = 0.0f;
 byte tempBuffSize = 0;
 
 
 std::string PREFIX = "smartthings/dishwasher/samsung/";
+
+
+float rollingAverage(float avg, float new_data, int count) {
+    avg -= avg / count;
+    avg += new_data / count;
+    return avg;
+}
 
 // if buffer starts with 55 0F 2A then parse 8 bytes and send to mqtt
 void serial2Handler() {
@@ -65,21 +71,23 @@ void serial2Handler() {
         publish("next_cycle_in", std::to_string(controller_buff[4]));
       }
 
+      // 6 - water pressure ?
       if (old_controller_buff[7] != controller_buff[7]) {
-        byte temp = controller_buff[7];
-        tempBuff + temp;
-        if (tempBuffSize < 10) {
-          tempBuffSize++;
-        }
-        
-        float avg = tempBuff / tempBuffSize;
-        tempBuff -= avg;
-        
-        if ( abs(temperature - avg) > 0.5) { // reports way too often otherwise
-           temperature = temp;
-           publish("temperature", std::to_string(temperature));
+        float new_temp = static_cast<float>(controller_buff[7]);
+
+        if (tempBuffSize < 5) {
+            tempBuffSize++;
+        } 
+
+        temperature = rollingAverage(temperature, new_temp, tempBuffSize);
+
+        if (abs(temperature - new_temp) > 0.5) {
+          //temperature = new_temp;
+          publish("temperature", std::to_string(int(temperature)));
         }
       }
+
+      // 8 - always 0x00 ?
       
       if (old_controller_buff[9] != controller_buff[9]) {
         byte b9 = controller_buff[9];
@@ -92,18 +100,27 @@ void serial2Handler() {
       //   publish("water_hardness/salt_gram", water_hardness(c_water_hardness));
       // }
       if (old_controller_buff[11] != controller_buff[11]) {
-        publish("contact", isDoorOpen() ? "open" : "closed");
-        publish_hex("contact/hex", controller_buff[11]);
+        byte b11 = controller_buff[11];
+        publish("contact", isDoorOpen(b11) ? "open" : "closed");
+        publish("rinse_empty", isRinseEmpty(b11) ? "true" : "false");
+        publish_hex("door", b11);
+      }
+
+      if (old_controller_buff[12] != controller_buff[12])
+      {
+        byte b12 = controller_buff[12];
+        publish_hex("unk12/hex", b12); // always 0x35 ?
       }
       
-      if (old_controller_buff[12] != controller_buff[12]) {
-        byte b12 = controller_buff[12];
-        publish("bottle_tab", bottle_tab(b12 & 0x0f));
-        publish_hex("bottle_tab/hex", b12);
+      if (old_controller_buff[13] != controller_buff[13]) {
+        byte b13 = controller_buff[13];
+        publish("bottle_tab", bottle_tab(b13 & 0x0f));
+        publish_hex("unk13/hex", b13 & 0xf0); // always 0 ?
       }
 
       
       memcpy(old_controller_buff, controller_buff, controller_buff_len);
+      print_c_old();
       old_sw_sum = sw_sum;
       break;
     }
@@ -119,88 +136,96 @@ void serial2Handler() {
   Serial.write(c);
 }
 
-char processSwBuff_0F(int i, char c) {
-  if (i<15) {
-    sw_sum += c;
-  } else {
-    m_machine = 0;
+// char processSwBuff_0F(int i, char c) {
+//   if (i<15) {
+//     sw_sum += c;
+//   } else {
+//     m_machine = 0;
     
-    if (sw_sum != c) {
-      debug.printf("\n cont checksum error: 0x%02X\n", c);
-    } else {
+//     if (sw_sum != c) {
+//       debug.printf("\n cont checksum error: 0x%02X\n", c);
+//     } else {
 
-      char _state = controller_buff[1];
-      publish("state", state(_state));
-      publish("switch", _state/16 == 0 ? "off" : "on");
+//       char _state = controller_buff[1];
+//       publish("state", state(_state));
+//       publish("switch", _state/16 == 0 ? "off" : "on");
       
-      char jobState = controller_buff[2];
-      publish("job_state", job_state(jobState));
-      publish_hex("job_state/hex", jobState);
+//       char jobState = controller_buff[2];
+//       publish("job_state", job_state(jobState));
+//       publish_hex("job_state/hex", jobState);
 
-    }
+//     }
 
-    if (c != controller_buff[i]) {
-      controller_buff[i] = c;
-      print_c_old();
-    }
+//     if (c != controller_buff[i]) {
+//       controller_buff[i] = c;
+//       print_c_old();
+//     }
 
-    return sw_sum;
-  }
+//     return sw_sum;
+//   }
 
-  if (c == controller_buff[i]) return c;
-  controller_buff[i] = c;
-  switch (i)
-  {
-    case 3: 
-      publish("completion_min", std::to_string(c)); // time till end
-      break;
-    case 4:
-      publish("next_cycle_in", std::to_string(c)); 
-      break;
-    // case 5: 0x15 or 0x00 -- nothing while washing
-    // case 6: 
-    //   publish("water/level", std::to_string(c)); // maybe water level
-    //   break;
-    // case 7:
-    //   if ( abs(temperature - c) > 1) { // reports way too often otherwise
-    //     temperature = c;
-    //     publish("temperature", std::to_string(c));
-    //   }
-    //   break;
-    // case 8: 0x55 0x0f 0x8/0x10/0x18/0x80 then 0x0  
-    // nothing while washing
-    case 9:
-      publish("baskets", baskets((c & 0xf0) >> 4));
-      publish("mode", mode(c & 0x0f));
-      break;
-    case 10: {
-      byte c_water_hardness = c >> 3; 
-      publish("water_hardness/level", std::to_string(c_water_hardness));
-      publish("water_hardness/salt_gram", water_hardness(c_water_hardness));
-      break;}
-    case 11:
-      publish("contact", (c & 0x0f) == 8 ? "open" : "closed");
-      publish_hex("contact/hex", c);
-      break;
-    // case 12: 0x35 0x65 0xb5 0x75 0x1c 0x9d
-    case 13:
-      publish("bottle_tab", bottle_tab(c & 0x0f));
-      publish_hex("bottle_tab/hex", c & 0xf0);
-      break;
-    // case 14: seconds cound down?
-    // heater? 0x55 when temp starts to rise
-    // 00, 31, 00 ,2a
-    //default:
-      //std::string topic = "unknown/" + std::to_string(i);
+//   if (c == controller_buff[i]) return c;
+//   controller_buff[i] = c;
+//   switch (i)
+//   {
+//     case 3: 
+//       publish("completion_min", std::to_string(c)); // time till end
+//       break;
+//     case 4:
+//       publish("next_cycle_in", std::to_string(c)); 
+//       break;
+//     // case 5: 0x15 or 0x00 -- nothing while washing
+//     // case 6: 
+//     //   publish("water/level", std::to_string(c)); // maybe water level
+//     //   break;
+//     // case 7:
+//     //   if ( abs(temperature - c) > 1) { // reports way too often otherwise
+//     //     temperature = c;
+//     //     publish("temperature", std::to_string(c));
+//     //   }
+//     //   break;
+//     // case 8: 0x55 0x0f 0x8/0x10/0x18/0x80 then 0x0  
+//     // nothing while washing
+//     case 9:
+//       publish("baskets", baskets((c & 0xf0) >> 4));
+//       publish("mode", mode(c & 0x0f));
+//       break;
+//     case 10: {
+//       byte c_water_hardness = c >> 3; 
+//       publish("water_hardness/level", std::to_string(c_water_hardness));
+//       publish("water_hardness/salt_gram", water_hardness(c_water_hardness));
+//       break;}
+//     case 11:
+//       publish("contact", (c & 0x0f) == 8 ? "open" : "closed");
+//       publish_hex("contact/hex", c);
+//       break;
+//     // case 12: 0x35 0x65 0xb5 0x75 0x1c 0x9d
+//     case 13:
+//       publish("bottle_tab", bottle_tab(c & 0x0f));
+//       publish_hex("bottle_tab/hex", c & 0xf0);
+//       break;
+//     // case 14: seconds cound down?
+//     // heater? 0x55 when temp starts to rise
+//     // 00, 31, 00 ,2a
+//     //default:
+//       //std::string topic = "unknown/" + std::to_string(i);
     
-      // publish_hex((topic+"/hex").c_str(), c);
-      // publish((topic).c_str(), std::to_string(c));
-    //  break;
-  }
+//       // publish_hex((topic+"/hex").c_str(), c);
+//       // publish((topic).c_str(), std::to_string(c));
+//     //  break;
+//   }
+// }
+
+bool isRinseEmpty(unsigned char statusByte) {
+    return (statusByte & 0x20) != 0;
 }
 
-inline bool isDoorOpen() {
-  return (controller_buff[11] & 0x0f) == 8;
+bool isDoorOpen(unsigned char statusByte) {
+    return (statusByte & 0x08) != 0;
+}
+
+bool isDoorOpen() {
+    return isDoorOpen(controller_buff[11]);
 }
 
 void print_c_old() {
