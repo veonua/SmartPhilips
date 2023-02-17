@@ -162,6 +162,10 @@ std::string selected_brew(char* buffer) {
         if (buffer[5] == 0x7) return "coffee";
         if (buffer[5] == 0x38) return "2xcoffee";
         if (buffer[6] == 0x7) return "cappuccino";
+        if (buffer[6] == 0x3f) return "latte";
+        
+        if (buffer[7] == 0x7) return "americano";
+        if (buffer[7] == 0x38) return "2xamericano";
     }
 
     return "";

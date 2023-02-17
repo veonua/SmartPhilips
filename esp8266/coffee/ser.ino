@@ -22,10 +22,32 @@ inline void serialInput2Mqtt() {
 
       if (memcmp(buff, buff_old, ser_buf_size) != 0) {
         lastChange = millis();
-      
+
+        // print buffer to debug
+        debug.printf("received %02x %02x:", buff[0], buff[1]);
+        // for (int i = 0; i < ser_buf_size; i++) {
+        //   debug.printf("%02x ", buff[i]);
+        // }
+        // debug.printf("\n");
+        
         if (buff_old[2] != buff[2]) {
           publish("switch", buff[2] == 0x1 ? "off" : "on");
         }
+
+        debug.printf("on:%02x", buff[2]);
+        debug.printf(" es:%02x hw:%02x co:%02x ca:%02x am:%02x", buff[3], buff[4], buff[5], buff[6], buff[7]);
+
+        debug.printf(" st:%02x", buff[8]);
+        debug.printf(" gr:%02x", buff[9]);
+        debug.printf(" wl:%02x", buff[10]);
+        debug.printf(" ??:%02x", buff[11]);
+        debug.printf(" ac:%02x", buff[12]);
+        debug.printf(" cl:%02x", buff[13]);
+        debug.printf(" wt:%02x", buff[14]);
+        debug.printf(" er:%02x", buff[15]);
+        debug.printf(" br:%02x", buff[16]);
+        debug.printf(" **:%02x\n", buff[17]);
+        
 
         if (status != get_status(buff_old)) {
           publish("status", status_str(status));

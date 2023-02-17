@@ -12,13 +12,14 @@ void handle_root() {
 void handle_status() {
     int status = get_status(buff);
     std::string response = "{";
-     response += "\"state\":\"" + status_str(status) +"\"";
+    response += "\"state\":\"" + status_str(status) +"\"";
     
     if (status == STATUS_SELECTED || status == STATUS_BREWING) {
       response += ",\"brew\":\"" + selected_brew(buff) +"\",";
       response += "\"strength_level\":\"" + std::to_string(level(buff[ 8])) +"\",";
       response += "\"grinder\":\"" + grinder(buff[9]) +"\",";
       response += "\"water_level\":\""    + std::to_string(level(buff[10])) +"\"";
+      response += "\"buf11\":\""    + std::to_string(buff[11]) +"\"";
     } else if (status >= STATUS_ERROR) {
       response += ",\"error\":\"" + error(buff[15]);
     }

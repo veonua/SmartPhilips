@@ -81,10 +81,37 @@ void set_brew(const char* value) {
       push_command(coffee);
     }
   } else if (brew == "cappuccino") {
-    push_command(steam);
+    push_command(cappuccino);
   } else if (brew == "hot water" || brew == "hot_water") {
     push_command(hotWater);
-  } else {
+  } else if (brew == "americano") {
+    push_command(americano);
+  } else if (brew == "2xamericano") {
+    push_command(americano);
+    if (_brew != "americano") {
+      push_command(americano);
+    }
+  } else if (brew == "espresso2") {
+    push_command(espresso2);
+  } else if (brew == "2xespresso2") {
+    push_command(espresso2);
+    if (_brew != "espresso2") {
+      push_command(espresso);
+    }
+  } else if (brew == "coffee2") {
+    push_command(coffee2);
+  } else if (brew == "2xcoffee2") {
+    push_command(coffee2);
+    if (_brew != "coffee2") {
+      push_command(coffee2);
+    }
+  } else if (brew == "cappuccino2") {
+    push_command(cappuccino2);
+  } else if (brew == "latte2") {
+    push_command(unknown);
+  } 
+  
+  else {
     debug.printf("Unknown brew value: %s\n", value);
   }
 }
@@ -128,6 +155,11 @@ void set_strength_level(const char* value) {
 void set_water_level(const char* value) {
     int current_level = level(buff[10]);
     set_level(current_level, value, coffeeWater);
+}
+
+void set_milk_level(const char* value) {
+    int current_level = level(buff[11]);
+    set_level(current_level, value, coffeeMilk2);
 }
 
 void run_preset(const char* value) {

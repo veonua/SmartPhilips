@@ -21,6 +21,8 @@ void onMqttMessage(char *topic, char *_payload,
     set_brew(payload);
   } else if (strcmp(topic, "water_level") == 0) {
     set_water_level(payload);  
+  } else if (strcmp(topic, "milk_level") == 0) {
+    set_milk_level(payload);  
   } else if (strcmp(topic, "strength_level") == 0) {
     set_strength_level(payload);
   } else if (strcmp(topic, "preset1") == 0) {
@@ -36,7 +38,7 @@ void onMqttMessage(char *topic, char *_payload,
   } else if (strcmp(topic, "coffee") == 0) {
     serialSend(coffee, repeat);
   } else if (strcmp(topic, "steam") == 0) {
-    serialSend(steam, repeat);
+    serialSend(cappuccino, repeat);
   } else if (strcmp(topic, "coffeePulver") == 0) {
     serialSend(coffeePulver, repeat);
   } else if (strcmp(topic, "coffeeWater") == 0) {
